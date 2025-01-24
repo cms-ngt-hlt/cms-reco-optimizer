@@ -38,6 +38,7 @@ parser.add_argument('-i', '--num_iterations', default=100, type=int, action='sto
 parser.add_argument('-c', '--continuing', type=str, default=None)
 parser.add_argument('-d', '--dir', type=str, action='store', help = "Directory where to continue.", required = is_continuing)  
 parser.add_argument('-b', '--bounds', nargs=2,help='Mins',default=(5,5))
+parser.add_argument('--typedBounds', nargs=1,help='json file with dictionary for upper,lower and type of params', default=None)
 parser.add_argument('--check', action='store_true', help = "Run the config once before the optimizer.")
 parser.add_argument('--debug', action='store_true', help = "Debug printouts.")
 ## cmsRun parameters
@@ -217,36 +218,56 @@ if __name__ == "__main__":
     print_subheaders("> > Default values: ")
     
     #Defining low bounds and high bounds
-    print_bounds(default_values)
-    params_bounds = dict(zip(["Low","High"],args.bounds))
-    for b,w in params_bounds.items():
-        print_subheaders("> > %s bounds: "%b)
-        if Path(start_dir+"/"+str(w)).is_file():
-            with open(start_dir+"/"+w, 'r') as file:
-                 params_bounds[b] = json.loads(file.read())
-            print("> > Read from",repr(w),":")
-            print_bounds(params_bounds[b])
-        else:
-            w = float(w)
-            m = w if b=="High" else 1./w
-            params_bounds[b] = {k: np.multiply(v,m).astype(type(v[0])).tolist() if hasattr(v, "__len__") else type(v)(float(v)*m) for k,v in default_values.items()  }
-            print("> > From input (factor=%.3f):"%m)
-            print_bounds(params_bounds[b])
-        sys.stdout.write("\r")
-    ub = []
-    for f in list(params_bounds["High"].values()):
-        ub = ub + f if hasattr(f, "__len__") else ub + [f]
     lb = []
-    for f in list(params_bounds["Low"].values()):
-        lb = lb + f if hasattr(f, "__len__") else lb + [f]
+    ub = []
     dv = []
-    for f in list(default_values.values()):
-        dv = dv + f if hasattr(f, "__len__") else dv + [f]
+    print_bounds(default_values)
+    if (args.typedBounds is not None):
+        with open(start_dir+"/"+args.typedBounds[0], 'r') as file:
+            params_bounds = json.loads(file.read())
+        print("> > Read from",repr(args.typedBounds[0]),":")
+        print_bounds(params_bounds)
+        for k in params_bounds.keys():
+            dv.append(default_values[k])
+            value_type = params_bounds[k]["value_type"]
+            if value_type == "int":
+                lb_ = params_bounds[k]["down"]
+                lb = lb + [int(lb_)] if not hasattr(lb_, "__len__") else lb + [int(j) for j in lb_]
+                ub_ = params_bounds[k]["up"]
+                ub = ub + [int(ub_)] if not hasattr(ub_, "__len__") else ub + [int(j) for j in ub_]
+            elif value_type == "double": 
+                lb_ = params_bounds[k]["down"]
+                lb = lb + [float(lb_)] if not hasattr(lb_, "__len__") else lb + [float(j) for j in lb_]
+                ub_ = params_bounds[k]["up"]
+                ub = ub + [float(ub_)] if not hasattr(ub_, "__len__") else ub + [float(j) for j in ub_]
+    else:
+        params_bounds = dict(zip(["Low","High"],args.bounds))
+        for b,w in params_bounds.items():
+            print_subheaders("> > %s bounds: "%b)
+            if Path(start_dir+"/"+str(w)).is_file():
+                with open(start_dir+"/"+w, 'r') as file:
+                     params_bounds[b] = json.loads(file.read())
+                print("> > Read from",repr(w),":")
+                print_bounds(params_bounds[b])
+            else:
+                w = float(w)
+                m = w if b=="High" else 1./w
+                params_bounds[b] = {k: np.multiply(v,m).astype(type(v[0])).tolist() if hasattr(v, "__len__") else type(v)(float(v)*m) for k,v in default_values.items()  }
+                print("> > From input (factor=%.3f):"%m)
+                print_bounds(params_bounds[b])
+            sys.stdout.write("\r")
+        for f in list(params_bounds["High"].values()):
+            ub = ub + f if hasattr(f, "__len__") else ub + [f]
+        for f in list(params_bounds["Low"].values()):
+            lb = lb + f if hasattr(f, "__len__") else lb + [f]
+        for f in list(default_values.values()):
+            dv = dv + f if hasattr(f, "__len__") else dv + [f]
+
 
     # Dumping value dictionaries for the records
-    pd.DataFrame(default_values).to_json("default_values.json")
-    pd.DataFrame(params_bounds["High"]).to_json("high_values.json")
-    pd.DataFrame(params_bounds["Low"]).to_json("low_values.json")
+    #pd.DataFrame(default_values).to_json("default_values.json")
+    #pd.DataFrame(params_bounds["High"]).to_json("high_values.json")
+    #pd.DataFrame(params_bounds["Low"]).to_json("low_values.json")
     # Dumping lower bounds and upper bounds for "continuing option"
     write_csv("lb.csv",lb)
     write_csv("ub.csv",ub)
@@ -292,7 +313,6 @@ if __name__ == "__main__":
                 num_particles=args.num_particles)
     
     pso.optimize(num_iterations=args.num_iterations)
-
     
     
 # run the optimization algorithm
