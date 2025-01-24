@@ -36,8 +36,8 @@ def from_modules_to_module(graph,starts,end):
     assert(len(end_node)<=1) ## python_label should be unique
     all_modules = []
     if len(end_node) == 0:
-        print("Warning! Module ",s," not found in the process.")
-        return all_connections
+        print("Warning! Module not found in the process.")
+        return all_modules
     end_node = end_node[0]
     for s in starts:
         start_node = [x for x,y in graph.nodes(data=True) if y['python_label']==s]
