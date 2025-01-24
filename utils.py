@@ -38,17 +38,35 @@ def get_metrics(uproot_file, id):
     
     return [1 - total_ass_sim / total_sim, (total_rec - total_ass + total_dup) / total_rec]
 
+def is_int(value):
+    return isinstance(value, (int, np.integer))
+
 # read a csv file, return a matrix
 def read_csv(filename):
-    matrix = np.genfromtxt(filename, delimiter=",", dtype=float)
-    if matrix.ndim == 2:
-        return matrix
+    matrix = np.genfromtxt(filename, delimiter=",", dtype=None)
+    matrix_typed = []
+    if matrix.ndim > 0:
+        for row in matrix:
+            new_row = []
+            for el in row:
+                typed_element = int(el) if is_int(el) else float(el) 
+                new_row.append(typed_element)
+            matrix_typed.append(new_row)
+
     else:
-        return np.array([matrix])
-    
+        for el in matrix:
+            typed_element = int(el) if is_int(el) else float(el) 
+            matrix_typed.append(typed_element)
+    return matrix_typed
+
 # write a matrix to a csv file
 def write_csv(filename, matrix):
-    np.savetxt(filename, matrix, fmt='%.18f', delimiter=',')
+
+    if hasattr(matrix[0], '__len__'):
+        fmt = ",".join(["%d" if is_int(vt) else "%f" for vt in matrix[0]])
+    else:
+        fmt = ",".join(["%d" if is_int(vt) else "%f" for vt in matrix])
+    np.savetxt(filename, np.matrix(matrix), fmt=fmt, delimiter=',')
 
 ### cmsRun specific helpers
 
