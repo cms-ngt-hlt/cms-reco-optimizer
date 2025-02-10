@@ -33,6 +33,7 @@ is_continuing = '--continuing' in sys.argv
 if not is_continuing:
     parser.add_argument('config', help = "Config to tune.")
 ## Optimizer parameters
+parser.add_argument('-o', '--out_name', default=None, type=str,help = "Name for the output folder, if not specified use timestamp")
 parser.add_argument('-p', '--num_particles', default=100, type=int, action='store',help = "Number of agents to spawn by the MOPSO optimizer.")
 parser.add_argument('-i', '--num_iterations', default=100, type=int, action='store',help = "Number of iterations to be run by MOPSO optimizer.")
 parser.add_argument('-c', '--continuing', type=str, default=None)
@@ -67,14 +68,17 @@ def reco_and_validate(params,config,**kwargs):#,timing=False):
     write_csv('temp/parameters.csv', params)
     validation_result = 'temp/simple_validation.root'
     
-
     # redirecting outputs to logs
     logfiles = tuple('%s/logs/%s' % (workdir, name) for name in ['process_last_out', 'process_last_err'])
     stdout = open(logfiles[0], 'w')
     stderr = open(logfiles[1], 'w')
 
-    command = ['cmsRun',config,'parametersFile=temp/parameters.csv', 'outputFile=' + validation_result]    
-    subprocess.run(command,stdout = stdout, stderr = stderr)
+    command = ['cmsRun', config, 'parametersFile=temp/parameters.csv', 'outputFile=' + validation_result]    
+    print(f" ### INFO: Running subprocess \n{command}")
+    if args.debug:
+        subprocess.run(command)
+    else:
+        subprocess.run(command,stdout = stdout, stderr = stderr)
     
     with uproot.open(validation_result) as uproot_file:
         population_fitness = [get_metrics(uproot_file, i) for i in range(num_particles)]
@@ -99,6 +103,8 @@ def copy_to_unique(c):
 
     formatted_date = datetime.now().strftime("%Y%m%d.%H%M%S")
     b = "./optimize."+c.replace(".py","")+"_"+formatted_date #str(random.getrandbits(64))
+    if args.out_name:
+        b = b+"_"+args.out_name
     os.mkdir(b)
     shutil.copy(c,b+"/"+c)
     shutil.copy("utils.py",b)
@@ -130,7 +136,8 @@ if __name__ == "__main__":
 
         n_particles = len(read_csv("temp/parameters.csv"))
         pso = MOPSO(objective=objective,
-                    lower_bounds=read_csv("lb.csv")[0], upper_bounds=read_csv("ub.csv"))
+                    lower_bounds=read_csv("lb.csv")[0], upper_bounds=read_csv("ub.csv"),
+                    social_coefficient=1)
         pso.optimize(num_iterations=args.num_iterations)
         sys.exit(0)
     

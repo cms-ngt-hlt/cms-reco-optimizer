@@ -34,6 +34,7 @@ def get_metrics(uproot_file, id):
     total_sim = tree['st'].array()[0]
     
     if not total_ass or not total_rec or not total_sim or not total_ass_sim:
+        print(f" ### WARNING: Metrics not found for iteration {id}")
         return [1.0] * 2
     
     return [1 - total_ass_sim / total_sim, (total_rec - total_ass + total_dup) / total_rec]
@@ -45,18 +46,22 @@ def is_int(value):
 def read_csv(filename):
     matrix = np.genfromtxt(filename, delimiter=",", dtype=None)
     matrix_typed = []
-    if matrix.ndim > 0:
-        for row in matrix:
-            new_row = []
-            for el in row:
+    # import pdb; pdb.set_trace()
+    if matrix.ndim == 2:
+        if hasattr(matrix[0], "__len__"):
+            for row in matrix:
+                new_row = []
+                for el in row:
+                    typed_element = int(el) if is_int(el) else float(el) 
+                    new_row.append(typed_element)
+                matrix_typed.append(new_row)
+        else:
+            for el in matrix:
                 typed_element = int(el) if is_int(el) else float(el) 
-                new_row.append(typed_element)
-            matrix_typed.append(new_row)
-
+                matrix_typed.append([typed_element])
     else:
-        for el in matrix:
-            typed_element = int(el) if is_int(el) else float(el) 
-            matrix_typed.append(typed_element)
+        matrix_typed = [[int(matrix) if is_int(matrix) else float(matrix)]]
+
     return matrix_typed
 
 # write a matrix to a csv file
@@ -186,22 +191,22 @@ def modules_tuning(process,inputs,params,tune):
     
     for i, row in enumerate(inputs):
         modules_to_tune = [getattr(process,t).clone() for t in tune]
-        enum_p = iter(enumerate(params))
-        n = 0
-        for p in params:
+        for n, p in enumerate(params):
             for m in modules_to_tune:
                 this_params = m.parameters_()
                 if p in this_params:
                     par = this_params[p]
-                    if is_v_input(type(par)):
+                    # check if it's a vector of doubles 
+                    if is_v_input(type(par)): 
+                        # change the list of values
                         l = len(par.value())
-                        setattr(m,p,[int(row[n+i]) for i in range(l)])
+                        setattr(m,p,[int(row[n+i]) for i in range(l)]) 
                     else:
-                        l = 1
-                        setattr(m,p,row[n])
-            n = n + 1
-        for n,m in zip(tune,modules_to_tune):
-            setattr(process,n+str(i),m)
+                         # change the value
+                        setattr(m,p,row[n]) 
+        for n,m in zip(tune,modules_to_tune): 
+            # append index to the name of module to tune
+            setattr(process,n+str(i),m) 
         
     return process
    
