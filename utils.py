@@ -34,10 +34,14 @@ def get_metrics(uproot_file, id):
     total_sim = tree['st'].array()[0]
     
     if not total_ass or not total_rec or not total_sim or not total_ass_sim:
-        print(f" ### WARNING: Metrics not found for iteration {id}")
+        print(f" ### WARNING: Metrics not found for agent {id}")
         return [1.0] * 2
     
     return [1 - total_ass_sim / total_sim, (total_rec - total_ass + total_dup) / total_rec]
+
+# return string for the metric name used for the csv header
+def get_metrics_names():
+    return ['1MinusEfficiency', 'FakeDuplicateRate']
 
 def is_int(value):
     return isinstance(value, (int, np.integer))
@@ -46,19 +50,17 @@ def is_int(value):
 def read_csv(filename):
     matrix = np.genfromtxt(filename, delimiter=",", dtype=None)
     matrix_typed = []
-    # import pdb; pdb.set_trace()
     if matrix.ndim == 2:
-        if hasattr(matrix[0], "__len__"):
-            for row in matrix:
-                new_row = []
-                for el in row:
-                    typed_element = int(el) if is_int(el) else float(el) 
-                    new_row.append(typed_element)
-                matrix_typed.append(new_row)
-        else:
-            for el in matrix:
+        for row in matrix:
+            new_row = []
+            for el in row:
                 typed_element = int(el) if is_int(el) else float(el) 
-                matrix_typed.append([typed_element])
+                new_row.append(typed_element)
+            matrix_typed.append(new_row)
+    elif matrix.ndim == 1:
+        for el in matrix:
+            typed_element = int(el) if is_int(el) else float(el) 
+            matrix_typed.append([typed_element])
     else:
         matrix_typed = [[int(matrix) if is_int(matrix) else float(matrix)]]
 
