@@ -53,23 +53,24 @@ Having these 3 files, The Optimizer is run with the command:
 hlt_pixel_optimization.py \
 -t hltPhase2PixelTracksSoA \
 -v hltPhase2PixelTracks \
---pars examples/params.csv \
+-b examples/config.json \
+-p cellZ0Cut,cellPtCut,cellMinYSizeB1,cellMinYSizeB2,cellMaxDYSize12,cellMaxDYSize,cellMaxDYPred \
 -f file:step2.root \
---num_threads 10 \
--p 100 \
--i 10 \
---typedBounds examples/config.json
+-j 32 \
+-a 100 \
+-i 10
 ```
 The parameters passed to `optimize_reco.py` are:
-- `-t\--tune` gets the name of the module we want to tune (this could be a list but for the moment implemented only for a single module)
-- `-v\--validate` is the modules that produces the object on which we want to validate, given in input to the validation
-- `--pars` gets the list of parameters that we want to tune with the MOPSO. It can be either a space-separated list passed directy from the command line or a comma-separated list in a `.csv` file
-- `-f` to specify the file(s) to be used as input for CMSSW.
-- `--numThreads` specifies the number of threads to use in each cmsRun instance
-- `-p\--num_particles` the number of agents.
-- `-i\--num_iterations` the number of iterations.
-- `--typedBounds` takes care of the definition of the upper and lower bounds for the parameters and their types. It expects a `.json` dictionary in the same format as the one shown in the example
-    
+- `-t\--tune`: Name of the module to be tuned
+- `-v\--validate`: Name of the modules that produces the object on which we want to validate, given in input to the validation
+- `-b\--bounds` json file for the definition of the upper and lower bounds for the parameters and their types. It expects a `.json` dictionary in the same format as the one shown in the example
+- `-p` gets the list of parameters that we want to tune with the MOPSO. It can be either a space-separated list passed directy from the command line or a comma-separated list in a `.csv` file
+- `-f` to specify the file(s) to be used as input for CMSSW
+- `-j\--numThreads` specifies the number of threads to use in each cmsRun instance
+- `-a\--num_particles` the number of agents
+- `-i\--num_iterations` the number of iterations
+- `-o` optional output tag for the foder name
+
 Executing the command, `optimize_reco.py` will run the following steps:
 
 1. loads the `process` defined in the input config adding to it the `DependencyGraph` `Service` and setting it to run with no source (`EmptySource`) and zero events. The new `process_zero` is then run just to get the graph of the modules used in the config.
@@ -88,4 +89,16 @@ All of this happens in an ad-hoc folder and one may continue the previous run by
 
 ```bash
 ./optimize_reco.py --continuing 10 --dir optimize.step3_pixel_20231123.010104
+```
+
+# Plotting the results
+
+This branch also includes scripts for plotting the movement of the particles across different iterations:
+```bash
+python3 examples/PlotParticles.py  <folder_name>
+```
+
+To plot the pareto front:
+```bash
+python3 examples/PlotMetrics.py <folder_name>
 ```
