@@ -3,7 +3,7 @@ import optimizer
 from optimizer import MOPSO
 import subprocess
 import itertools
-from utils import get_metrics, get_metrics_names, write_csv, parseProcess, spinner, read_csv
+from utils import get_binned_metrics, get_binned_metrics_names, write_csv, parseProcess, spinner, read_csv
 from graphs import convert_to_graph, from_modules_to_module
 import numpy as np
 import uproot
@@ -81,7 +81,7 @@ def reco_and_validate(params,config,**kwargs):#,timing=False):
         subprocess.run(command,stdout = stdout, stderr = stderr)
     
     with uproot.open(validation_result) as uproot_file:
-        population_fitness = [get_metrics(uproot_file, i) for i in range(num_particles)]
+        population_fitness = [get_binned_metrics(uproot_file, i) for i in range(num_particles)]
 
     return population_fitness
   
@@ -236,6 +236,16 @@ if __name__ == "__main__":
     with open("bounds.json", "w") as json_file:
         json.dump(filtered_dict, json_file, indent=4)
 
+    ## Get parameter names for header (repeat multiple times in case of a vector)
+    param_names = []
+    for key in params:
+        if not hasattr(filtered_dict[key]["down"], "__len__"): 
+            param_names += [key]
+        else: 
+            param_names += [f'{key}{i}' for i in range(len(filtered_dict[key]["down"]))]
+    
+    print(" ### DEBUG: param_names = ", param_names)
+
     ## Handling parameter values in input
     print_headers("> Parameter values:")
     params_dict = getattr(process_zero,modules_to_tune[0]).parameters_()
@@ -294,7 +304,7 @@ if __name__ == "__main__":
 
     pso = MOPSO(objective=objective, lower_bounds=lb, upper_bounds=ub, 
                 num_particles=args.num_particles,
-                param_names=params, metric_names=get_metrics_names())
+                param_names=param_names, metric_names=get_binned_metrics_names())
     
     pso.optimize(num_iterations=args.num_iterations)
     

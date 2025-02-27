@@ -43,30 +43,79 @@ def get_metrics(uproot_file, id):
 def get_metrics_names():
     return ['1MinusEfficiency', 'FakeDuplicateRate']
 
+# calculate the metrics from validation results in pt and eta bins
+def get_binned_metrics(uproot_file, id):
+    # pdb.set_trace()
+    h_dir = uproot_file['simpleBinnedValidation' + str(id)]
+    # histograms vs eta
+    h_sim_eta = h_dir['h_st_eta'].values()
+    h_ass_sim_eta = h_dir['h_ast_eta'].values()
+    h_rec_eta = h_dir['h_rt_eta'].values()
+    h_dup_eta = h_dir['h_dt_eta'].values()
+    h_ass_eta = h_dir['h_at_eta'].values()
+    n_eta_bins = len(h_sim_eta)
+    # histograms vs pt
+    h_sim_pt = h_dir['h_st_pt'].values()
+    h_ass_sim_pt = h_dir['h_ast_pt'].values()
+    h_rec_pt = h_dir['h_rt_pt'].values()
+    h_dup_pt = h_dir['h_dt_pt'].values()
+    h_ass_pt = h_dir['h_at_pt'].values()
+    n_pt_bins = len(h_sim_pt)
+    
+    # metrics vs eta
+    metrics_eta = []
+    if not h_sim_eta.any() or not h_ass_sim_eta.any() or not h_rec_eta.any() or not h_ass_eta.any() :
+        print(f" ### WARNING: Metrics not found for agent {id} in any eta bin")
+        metrics_eta = [1.0] * (2 * n_eta_bins)
+    else:
+        for ib, (i_ast, i_s, i_r, i_d, i_as) in enumerate(zip(h_ass_sim_eta, h_sim_eta, h_rec_eta, h_dup_eta, h_ass_eta)) :
+            if not i_s or not i_ast or not i_r or not i_as : 
+                metrics_eta += [1.0] * 2
+                print(f" ### WARNING: Metrics not found for agent {id} in eta bin {ib}")
+            else:
+                metrics_eta += [(1 - (i_ast/i_s)), ((i_r - i_as + i_d) / i_r)]
+
+    # metrics vs pt
+    metrics_pt = []
+    if not h_sim_pt.any() or not h_ass_sim_pt.any() or not h_rec_pt.any() or not h_ass_pt.any() :
+        print(f" ### WARNING: Metrics not found for agent {id} in any pt bin")
+        metrics_pt = [1.0] * (2 * n_pt_bins)
+    else:
+        for ib, (i_ast, i_s, i_r, i_d, i_as) in enumerate(zip(h_ass_sim_pt, h_sim_pt, h_rec_pt, h_dup_pt, h_ass_pt)) :
+            if not i_s or not i_ast or not i_r or not i_as : 
+                metrics_pt += [1.0] * 2
+                print(f" ### WARNING: Metrics not found for agent {id} in pt bin {ib}")
+            else:
+                metrics_pt += [(1 - (i_ast/i_s)), ((i_r - i_as + i_d) / i_r)]
+
+    # print(" ### INFO DEBUG: ", type(metrics_eta + metrics_pt), metrics_eta + metrics_pt)
+    return metrics_eta + metrics_pt
+
+# return string for the metric name used for the csv header
+def get_binned_metrics_names():
+    return ['1MinusEfficiency_NegEndcap', 'FakeDuplicateRate_NegEndcap', 
+            '1MinusEfficiency_Barrel', 'FakeDuplicateRate_Barrel',
+            '1MinusEfficiency_PosEndcap', 'FakeDuplicateRate_PosEndcap',
+            '1MinusEfficiency_Pt0_3GeV', 'FakeDuplicateRate_Pt0_3GeV',
+            '1MinusEfficiency_Pt3_10GeV', 'FakeDuplicateRate_Pt3_10GeV',
+            '1MinusEfficiency_Pt10_100GeV', 'FakeDuplicateRate_Pt10_100GeV']
+
 def is_int(value):
+    """Check if a string value represents an int."""
     return isinstance(value, (int, np.integer))
 
-# read a csv file, return a matrix
+def is_float(value):
+    """Check if a string value represents a float."""
+    return isinstance(value, (float, np.floating))
+
+# read a csv file, return a matrix preserving integer and float types
 def read_csv(filename):
-    matrix = np.genfromtxt(filename, delimiter=",", dtype=None)
-    matrix_typed = []
-    if matrix.ndim == 2:
-        for row in matrix:
-            new_row = []
-            for el in row:
-                typed_element = int(el) if is_int(el) else float(el) 
-                new_row.append(typed_element)
-            matrix_typed.append(new_row)
-    elif matrix.ndim == 1:
-        for el in matrix:
-            typed_element = int(el) if is_int(el) else float(el) 
-            matrix_typed.append([typed_element])
-    else:
-        matrix_typed = [[int(matrix) if is_int(matrix) else float(matrix)]]
 
-    return matrix_typed
+    # unpack option helps preserving the type when dealing with mixed type matrices, but requires to transpose back with .T
+    matrix = np.array(np.genfromtxt(filename, delimiter=",", dtype=None, unpack=True), dtype=object).T
+    return matrix
 
-# write a matrix to a csv file
+# write a matrix to a csv file preserving integer and float types
 def write_csv(filename, matrix):
 
     if hasattr(matrix[0], '__len__'):
@@ -158,17 +207,17 @@ def add_validation(process,inputs,target):
     for i,_ in enumerate(inputs):
         
         # All these params may be copied from the MTV defined in the process
-        name = 'simpleValidation' + str(i)
-        setattr(process, name, cms.EDAnalyzer('SimpleValidation',
+        name = 'simpleBinnedValidation' + str(i)
+        setattr(process, name, cms.EDAnalyzer('SimpleBinnedValidation',
                 chargedOnlyTP = cms.bool(True),
                 intimeOnlyTP = cms.bool(False),
                 invertRapidityCutTP = cms.bool(False),
                 lipTP = cms.double(30.0),
                 maxPhi = cms.double(3.2),
-                maxRapidityTP = cms.double(2.5),
+                maxRapidityTP = cms.double(4),
                 minHitTP = cms.int32(0),
                 minPhi = cms.double(-3.2),
-                minRapidityTP = cms.double(-2.5),
+                minRapidityTP = cms.double(-4),
                 pdgIdTP = cms.vint32(),
                 ptMaxTP = cms.double(1e+100),
                 ptMinTP = cms.double(0.9),
@@ -183,9 +232,9 @@ def add_validation(process,inputs,target):
 
         taskList.append(getattr(process, name))
 
-    process.simpleValidationSeq = cms.Sequence(sum(taskList[1:],taskList[0]))
-    process.simpleValidationPath = cms.EndPath(process.simpleValidationSeq)
-    process.schedule.extend([process.simpleValidationPath])
+    process.simpleBinnedValidationSeq = cms.Sequence(sum(taskList[1:],taskList[0]))
+    process.simpleBinnedValidationPath = cms.EndPath(process.simpleBinnedValidationSeq)
+    process.schedule.extend([process.simpleBinnedValidationPath])
 
     return process
     
