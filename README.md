@@ -1,24 +1,103 @@
+# NGT instructions for optimization of Pixel Tracks
+
+This repository: [https://github.com/cms-ngt-hlt/cms-reco-optimizer](https://github.com/cms-ngt-hlt/cms-reco-optimizer)
+Currently using a development branch `PixelPatatrackDev`.
+
+Optimizer repository: [https://github.com/cms-patatrack/The-Optimizer](https://github.com/cms-patatrack/The-Optimizer)
+Currently using a fork (it contains a transparent but necessary option to include the header in pareto front, used for data visualization and plotting).
+
 <img width="1144" alt="Screenshot 2023-11-24 alle 09 46 27" src="https://github.com/cms-pixel-autotuning/CA-parameter-tuning/assets/16901146/5bee2244-9afc-46a2-99c6-a75705045442">
 
-# Introduction
+## Introduction
 
 This repo has a new `optimize_reco.py` script, modelled on top of `optimize.py` from https://github.com/cms-patatrack/The-Optimizer/tree/main, thought as a wrapper to make the MOPSO work with a generic `cms-sw` reconstruction config in input. 
 
-# First steps
+### Installation
 
-Make sure you have pulled The-Optimizer as a submodule (either using git pull --recursive) or by simply using git pull inside this repository's folder. 
-Then follow the instructions at https://github.com/cms-patatrack/The-Optimizer/tree/main and install it by running 
+We are currently using the `CMSSW_15_0_0_pre3` release, in a branch with SimDoublets developments:
 ```bash
-cd The-Optimizer
-pip3 install .
+cmsrel CMSSW_15_0_0_pre3
+cd CMSSW_15_0_0_pre3/src
+cmsenv
+git cms-init
+git cms-checkout-topic JanGerritSchulz:jgs_ph2_pixelTracking_addSimDoublets
 ```
-Note that you will need to update your `PYTHONPATH` with
-```bash
-export PYTHONPATH="${PYTHONPATH}:PATH_TO_THEOPTIMIZER_REPO"
-```
-This can be done automatically by sourcing `extra_setup.sh` once you have created your CMSSW environment.
 
-# Run The-Optimizer
+Add the validation scripts (**NEW** version binned in eta and pt):
+```bash
+git cms-rebase-topic elenavernazza:ev_theOptimizer
+```
+
+Install the container for The Optimizer:
+```bash
+git clone git@github.com:cms-ngt-hlt/cms-reco-optimizer.git
+git checkout PixelPatatrackDev
+```
+
+If you are working on the P5 machines, you will need a specific branch of The Optimizer to deactivate Numba, which is in Luca's fork:
+```bash
+cd cms-reco-optimizer
+git clone git@github.com:Parsifal-2045/The-Optimizer.git
+git checkout RemoveNumba
+```
+
+<!-- Go back to the `CMSSW_15_0_0_pre3/src` folder and get the validation scripts:
+```bash
+git cms-addpkg Validation/RecoTrack
+curl https://raw.githubusercontent.com/AdrianoDee/cmssw/6d1a41ac921c5c4f191b7a3d46aabbfa577ee9db/Validation/RecoTrack/plugins/SimpleValidation.cc -o Validation/RecoTrack/plugins/SimpleValidation.cc
+``` -->
+
+Finally, compile:
+```bash
+scram b -j 12
+```
+</details>
+
+### Input files
+
+- Single Muon samples
+
+Configuration from the default workflow for "SingleMuPt15Eta0_0p4":
+```bash
+runTheMatrix.py -w upgrade -l 29690.402 -j 0
+```
+
+Configuration from the default workflow for "SingleMuPt15Eta1p7_2p7":
+```bash
+runTheMatrix.py -w upgrade -l 29689.402 -j 0
+```
+
+Run the first two steps:
+```bash
+cmsRun SingleMuPt15Eta0_0p4_cfi_GEN_SIM.py
+cmsRun step2_DIGI_L1TrackTrigger_L1_L1P2GT_DIGI2RAW_HLT.py
+```
+
+- TTbar samples
+
+Configuration from the default workflow for "TTbar" without pile-up:
+```bash
+runTheMatrix.py -w upgrade -l 29634.402 -j 0
+```
+
+Run the first two steps:
+```bash
+cmsRun TTbar_14TeV_TuneCP5_cfi_GEN_SIM.py
+cmsRun step2_DIGI_L1TrackTrigger_L1_L1P2GT_DIGI2RAW_HLT_PU.py
+```
+
+### Plot of the SimDoublets before optimizing
+
+To plot the doublets before optimizing the cuts, use the analyzer in `src/Validation/TrackingMCTruth/test`".
+Change the input file location and run:
+```bash
+cmsRun simDoublets_TEST.py
+cmsRun simDoublets_HARVESTING.py
+```
+
+## Run The-Optimizer
+
+The **NEW** version of the optimization makes use of metrics binned in eta and pt.
 
 This interface runs the optimizer on top of CMSSW taking a list of parameters to tune, the module they belong to, and a target used to validate against.
 `optimize_reco.py` automatically produces a `cmsRun` configuration derived from a provided input configuration (i.e. a `step2.py` or `step.py`).
@@ -43,11 +122,15 @@ cmsDriver.py step2 \
 ```
 is a regular CMSSW configuration that runs the HLT reconstruction and validation.
 
-[`params.csv`](./examples/params.csv) contains the list of parameters to be tuned (comma separated)
-
 [`config.json`](./examples/config.json) contains the dictionary of all parameters to be tuned including their lower and upper bounds, as well as their type (in case of vectors, the type of their elements) 
 
-Having these 3 files, The Optimizer is run with the command:
+Having these 2 files, The Optimizer can be run. First, source The Optimizer path from within the `cms-reco-optimizer` folder:
+
+```bash
+export PYTHONPATH=${PYTHONPATH}:$PWD/The-Optimize
+```
+
+Then, start the optimization:
 ```bash
 ./optimize_reco.py \
 hlt_pixel_optimization.py \
@@ -70,8 +153,11 @@ The parameters passed to `optimize_reco.py` are:
 - `-a\--num_particles` the number of agents
 - `-i\--num_iterations` the number of iterations
 - `-o` optional output tag for the foder name
+- `-i\--num_iterations` the number of iterations
+- `--debug` to run in debug mode (helpful when the error in the subprocess running `cmsRun`)
 
-Executing the command, `optimize_reco.py` will run the following steps:
+<details>
+<summary>Executing the command, `optimize_reco.py` will run the following steps:</summary>
 
 1. loads the `process` defined in the input config adding to it the `DependencyGraph` `Service` and setting it to run with no source (`EmptySource`) and zero events. The new `process_zero` is then run just to get the graph of the modules used in the config.
 
@@ -91,6 +177,8 @@ All of this happens in an ad-hoc folder and one may continue the previous run by
 ./optimize_reco.py --continuing 10 --dir optimize.step3_pixel_20231123.010104
 ```
 
+</details>
+
 # Plotting the results
 
 This branch also includes scripts for plotting the movement of the particles across different iterations:
@@ -98,7 +186,12 @@ This branch also includes scripts for plotting the movement of the particles acr
 python3 examples/PlotParticles.py  <folder_name>
 ```
 
-To plot the pareto front:
+To plot the pareto front (**NEW** version binned in eta and pt):
 ```bash
 python3 examples/PlotMetrics.py <folder_name>
+```
+
+To plot the pareto front interactively (**NEW** version binned in eta and pt):
+```bash
+python3 examples/PlotInteractiveMetrics.py <folder_name>
 ```

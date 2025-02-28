@@ -7,7 +7,7 @@ plt.style.use(mplhep.style.CMS)
 
 try: main_folder = sys.argv[1]
 except: sys.exit(" ### ERROR: Please provide the path to the main folder\n"
-    " --> python3 examples/PlotMetrics.py optimize.hlt_pixel_optimization_20250127.165402")
+    " --> python3 examples/PlotInteractiveMetrics.py optimize.hlt_pixel_optimization_20250127.165402")
 
 keys = ['cellZ0Cut', 'cellPtCut', 'cellMinYSizeB1', 'cellMinYSizeB2', 'cellMaxDYSize12', 'cellMaxDYSize', 'cellMaxDYPred', 
         'phiCuts0', 'phiCuts1', 'phiCuts2', 'phiCuts3', 'phiCuts4', 'phiCuts5', 'phiCuts6', 'phiCuts7', 'phiCuts8', 'phiCuts9', 'phiCuts10', 
@@ -58,7 +58,7 @@ def ConvertMetricBinName (metric):
 
     return name
 
-fig, axs = plt.subplots(2, 3, figsize=(30, 20))
+fig, axs = plt.subplots(2, 3, figsize=(18, 12))
 scatter_objects = []
 
 for i_eta, eta_bin in enumerate(eta_bins):
@@ -106,6 +106,10 @@ for i_pt, pt_bin in enumerate(pt_bins):
     ax.set_xlim(0,1)
     ax.set_ylim(0,1)
     ax.grid(alpha=0.3)
+
+print(f" ### INFO: Saving {path}/Plots/ParetoFront_Interactive.png")
+plt.savefig(f"{path}/Plots/ParetoFront_Interactive.png")
+plt.savefig(f"{path}/Plots/ParetoFront_Interactive.pdf")
 
 annotation = None
 highlighted_scatter = []
@@ -165,7 +169,7 @@ def on_hover(event):
     for scatter in scatter_objects:
         ax = scatter.axes
         x_point, y_point = scatter.get_offsets()[nearest_idx]
-        point = ax.scatter(x_point, y_point, color='blue', edgecolor='black', s=100)  # Highlight with blue
+        point = ax.scatter(x_point, y_point, color='blue', edgecolor='black', s=70)  # Highlight with blue
         highlighted_scatter.append(point)
 
     scatter_objects[current_scatter].axes.set_zorder(3*(i_move))
