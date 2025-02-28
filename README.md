@@ -31,14 +31,16 @@ git cms-rebase-topic elenavernazza:ev_theOptimizer
 Install the container for The Optimizer:
 ```bash
 git clone git@github.com:cms-ngt-hlt/cms-reco-optimizer.git
+cd cms-reco-optimizer
 git checkout PixelPatatrackDev
 ```
 
 If you are working on the P5 machines, you will need a specific branch of The Optimizer to deactivate Numba, which is in Luca's fork:
 ```bash
-cd cms-reco-optimizer
 git clone git@github.com:Parsifal-2045/The-Optimizer.git
+cd The-Optimizer
 git checkout RemoveNumba
+cd ../..
 ```
 
 <!-- Go back to the `CMSSW_15_0_0_pre3/src` folder and get the validation scripts:
@@ -95,7 +97,7 @@ cmsRun simDoublets_TEST.py
 cmsRun simDoublets_HARVESTING.py
 ```
 
-## Run The-Optimizer
+# Run The-Optimizer
 
 The **NEW** version of the optimization makes use of metrics binned in eta and pt.
 
@@ -127,7 +129,7 @@ is a regular CMSSW configuration that runs the HLT reconstruction and validation
 Having these 2 files, The Optimizer can be run. First, source The Optimizer path from within the `cms-reco-optimizer` folder:
 
 ```bash
-export PYTHONPATH=${PYTHONPATH}:$PWD/The-Optimize
+export PYTHONPATH=${PYTHONPATH}:$PWD/The-Optimizer
 ```
 
 Then, start the optimization:
@@ -136,12 +138,12 @@ Then, start the optimization:
 hlt_pixel_optimization.py \
 -t hltPhase2PixelTracksSoA \
 -v hltPhase2PixelTracks \
+-f file:/data/user/evernazz/PixelPatatrack/2025_01_27/CMSSW_15_0_0_pre2/src/29634.402_TTbar_14TeV+Run4D110_Patatrack_PixelOnlyAlpaka/step2.root \
+--num_threads 32 \
+-a 32 \
+-i 10 \
 -b examples/config.json \
--p cellZ0Cut,cellPtCut,cellMinYSizeB1,cellMinYSizeB2,cellMaxDYSize12,cellMaxDYSize,cellMaxDYPred \
--f file:step2.root \
--j 32 \
--a 100 \
--i 10
+--num_events 100 -o dev 
 ```
 The parameters passed to `optimize_reco.py` are:
 - `-t\--tune`: Name of the module to be tuned
