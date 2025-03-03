@@ -3,9 +3,11 @@ import numpy as np
 import sys, os, mplhep, glob
 plt.style.use(mplhep.style.CMS)
 
+import pandas as pd
+
 try: main_folder = sys.argv[1]
 except: sys.exit(" ### ERROR: Please provide the path to the main folder\n"
-    " --> python3 examples/PlotMetrics.py optimize.hlt_pixel_optimization_20250127.165402")
+    " --> python3 examples/PlotParticles.py optimize.hlt_pixel_optimization_20250127.165402")
 
 history_folder = f'{main_folder}/checkpoint/history'
 
@@ -13,108 +15,100 @@ path = history_folder
 os.system(f'mkdir -p {path}/Plots')
 print(f" ### INFO: Saving plots in {path}/Plots")
 
-first_iteration_file = glob.glob(history_folder+'/*csv')[0]
-first_iteration = np.genfromtxt(first_iteration_file, delimiter=",", dtype=None, skip_header=1)
-with open(first_iteration_file, "r") as f:
-    var_names = f.readline().strip().split(",")
+metric_1 = "1MinusEfficiency"
+metric_2 = "FakeDuplicateRate"
+vector_cuts = ['phiCuts']
 
-n_it = len(first_iteration_file)
-n_var = len(first_iteration[0])-2
-tot_part = len(first_iteration)
-n_part = 10
+def GetMetric (metric):
+    if metric_1 in metric: 
+        return 'Efficiency'
+    if metric_2 in metric:
+        return 'Fake + Duplicate Rate'
+    return metric
 
-i_p_vars = [] # matrix of cut values, for each iteration and each particle
-i_p_efficiency = [] # matrix of efficiencies, for each iteration and each particle
-i_p_fake_rate = [] # matrix of fake rates, for each iteration and each particle
+df_list = []
+for i, iteration_filename in enumerate(glob.glob(history_folder+'/*csv')):
+    df = pd.read_csv(iteration_filename)
+    df['iteration'] = i
+    df_list.append(df)
+df = pd.concat(df_list)
+header = df.keys().to_list()
+header.remove('iteration')
 
-# Loop over iterations
-for iteration_filename in glob.glob(history_folder+'/*csv'):
-    iterations = np.genfromtxt(iteration_filename, delimiter=",", dtype=None, skip_header=1)
-    p_vars = [] # matrix of cut values, for each particle
-    p_efficiency = [] # vector of efficiencies, for each particle
-    p_fake_rate = [] # vector of fake rates, for each particle
-    for iteration in iterations:
-        p_vars.append(iteration[:-2])
-        p_efficiency.append(1-iteration[-2]) # 1MinusEfficiency
-        p_fake_rate.append(iteration[-1]) # FakeDuplicateRate
-    i_p_vars.append(p_vars)
-    i_p_efficiency.append(p_efficiency)
-    i_p_fake_rate.append(p_fake_rate)
+metrics = [item for item in header if metric_1 in item or metric_2 in item]
+vars = [item for item in header if item not in metrics]
+metrics_pt = [item for item in metrics if "_Pt" in item]
+metrics_eta = [item for item in metrics if item not in metrics_pt]
 
-for i in np.arange(0, tot_part, n_part):
+pt_bins = [item.split('_Pt')[-1] for item in metrics_pt]
+eta_bins = [item.split('_')[-1] for item in metrics_eta]
+pt_bins = list(dict.fromkeys(pt_bins))
+eta_bins = list(dict.fromkeys(eta_bins))
+
+n_cols = max(len(eta_bins), len(pt_bins))
+n_rows = 2  # One row for eta_bins, one for pt_bins
+n_iterations = len(df.iteration.unique())
+n_agents = len(df.index.unique())
+max_n_agents = 10
+
+for i in np.arange(0, n_agents, max_n_agents):
+
+    fig, axs = plt.subplots(n_rows, n_cols, figsize=(n_cols * 5, n_rows * 5))
+    axs = axs.reshape(n_rows, n_cols) if n_cols > 1 else [[ax] for ax in axs]
 
     start_from = i
-
-    # Plot evolution of efficiency and fake rate across iterations
-    plt.figure(figsize=(10, 10))
     cmap = plt.cm.viridis
 
-    for p_id in range(start_from,start_from+n_part):
-        efficiency = [p_efficiency[p_id] for p_efficiency in i_p_efficiency]
-        fake_rate = [p_fake_rate[p_id] for p_fake_rate in i_p_fake_rate]
-        plt.plot(efficiency, fake_rate, color=cmap((p_id-start_from)/n_part), 
-                 linestyle='--', marker='o', label=f'Part {p_id}')
+    for i_eta, eta_bin in enumerate(eta_bins):
+        ax = axs[0][i_eta]
+        for p_id in range(start_from,start_from+max_n_agents):
+            if not p_id in df.index: continue
+            efficiencies = 1 - df[df.index == p_id][f"{metric_1}_{eta_bin}"] # 1MinusEfficiency
+            fake_rates = df[df.index == p_id][f"{metric_2}_{eta_bin}"] # FakeDuplicateRate
+            ax.scatter(efficiencies, fake_rates, color=cmap((p_id-start_from)/max_n_agents), 
+                    linestyle='--', marker='o', label=f'Part {p_id}')
+        # Labels and legend
+        title_size = 12
+        ax.set_title(f'{eta_bin}', fontsize=title_size)
+        ax.set_xlabel(GetMetric(metric_1), fontsize=title_size)
+        ax.set_ylabel(GetMetric(metric_2), fontsize=title_size)
+        ax.tick_params(axis='x', labelsize=title_size)
+        ax.tick_params(axis='y', labelsize=title_size)
+        ax.set_xlim(0,1)
+        ax.set_ylim(0,1)
+        ax.grid(alpha=0.3)
+        ax.legend(fontsize=title_size)
 
-    # Labels and legend
-    plt.xlabel('Efficiency')
-    plt.xlim(-0.1,1.1)
-    plt.ylabel('Fake + Duplicate Rate')
-    plt.ylim(-0.1,1.1)
-    plt.legend()
-    plt.grid(alpha=0.3)
+    for i_pt, pt_bin in enumerate(pt_bins):
+        ax = axs[1][i_pt]
+        for p_id in range(start_from,start_from+max_n_agents):
+            if not p_id in df.index: continue
+            efficiencies = 1 - df[df.index == p_id][f"{metric_1}_Pt{pt_bin}"] # 1MinusEfficiency
+            fake_rates = df[df.index == p_id][f"{metric_2}_Pt{pt_bin}"] # FakeDuplicateRate
+            ax.scatter(efficiencies, fake_rates, color=cmap((p_id-start_from)/max_n_agents), 
+                    linestyle='--', marker='o', label=f'Part {p_id}')
+        # Labels and legend
+        title_size = 12
+        min_pt = pt_bin.split('GeV')[0].split('_')[0]
+        max_pt = pt_bin.split('GeV')[0].split('_')[1]
+        ax.set_title(f'$p_T \; {min_pt} - {max_pt} \; GeV$', fontsize=title_size)
+        ax.set_xlabel(GetMetric(metric_1), fontsize=title_size)
+        ax.set_ylabel(GetMetric(metric_2), fontsize=title_size)
+        ax.tick_params(axis='x', labelsize=title_size)
+        ax.tick_params(axis='y', labelsize=title_size)
+        ax.set_xlim(0,1)
+        ax.set_ylim(0,1)
+        ax.grid(alpha=0.3)
+        ax.legend(fontsize=title_size)
 
-    print(f" ### INFO: Saving {path}/Plots/Particles_{start_from}_{start_from+n_part}.png")
-    plt.savefig(f"{path}/Plots/Particles_{start_from}_{start_from+n_part}.png")
-    plt.savefig(f"{path}/Plots/Particles_{start_from}_{start_from+n_part}.pdf")
+    # Hide unused subplots (if eta_bins and pt_bins are of different lengths)
+    for i in range(len(pt_bins), n_cols):
+        fig.delaxes(axs[1][i])
+
+    plt.tight_layout()
+
+    print(f" ### INFO: Saving {path}/Plots/Particles_{start_from}_{start_from+max_n_agents}.png")
+    plt.savefig(f"{path}/Plots/Particles_{start_from}_{start_from+max_n_agents}.png")
+    plt.savefig(f"{path}/Plots/Particles_{start_from}_{start_from+max_n_agents}.pdf")
     plt.close()
-
-    # Plot evolution of efficiency as a function of variables across iterations
-    for i_var in range(n_var):
-
-        plt.figure(figsize=(10, 10))
-        cmap = plt.cm.viridis
-
-        for p_id in range(start_from,start_from+n_part):
-            efficiency = [p_efficiency[p_id] for p_efficiency in i_p_efficiency]
-            var = [p_var[p_id][i_var] for p_var in i_p_vars]
-
-            plt.plot(var, efficiency, color=cmap((p_id-start_from)/n_part), 
-                    linestyle='--', marker='o', label=f'Part {p_id}')
-
-        # Labels and legend
-        plt.xlabel(f'{var_names[i_var]}')
-        plt.ylabel('Efficiency')
-        plt.ylim(-0.1,1.1)
-        plt.legend()
-        plt.grid(alpha=0.3)
-
-        print(f" ### INFO: Saving {path}/Plots/Particles_{var_names[i_var]}_Efficiency_{start_from}_{start_from+n_part}.png")
-        plt.savefig(f"{path}/Plots/Particles_{var_names[i_var]}_Efficiency_{start_from}_{start_from+n_part}.png")
-        plt.savefig(f"{path}/Plots/Particles_{var_names[i_var]}_Efficiency_{start_from}_{start_from+n_part}.pdf")
-        plt.close()
-
-    # Plot evolution of fake rate as a function of variables across iterations
-    for i_var in range(n_var):
-
-        plt.figure(figsize=(10, 10))
-        cmap = plt.cm.viridis
-
-        for p_id in range(start_from,start_from+n_part):
-            fake_rate = [p_fake_rate[p_id] for p_fake_rate in i_p_fake_rate]
-            var = [p_var[p_id][i_var] for p_var in i_p_vars]
-
-            plt.plot(var, fake_rate, color=cmap((p_id-start_from)/n_part), 
-                    linestyle='--', marker='o', label=f'Part {p_id}')
-
-        # Labels and legend
-        plt.xlabel(f'{var_names[i_var]}')
-        plt.ylabel('Fake + Duplicate Rate')
-        plt.ylim(-0.1,1.1)
-        plt.legend()
-        plt.grid(alpha=0.3)
-
-        print(f" ### INFO: Saving {path}/Plots/Particles_{var_names[i_var]}_FakeRate_{start_from}_{start_from+n_part}.png")
-        plt.savefig(f"{path}/Plots/Particles_{var_names[i_var]}_FakeRate_{start_from}_{start_from+n_part}.png")
-        plt.savefig(f"{path}/Plots/Particles_{var_names[i_var]}_FakeRate_{start_from}_{start_from+n_part}.pdf")
-        plt.close()
 

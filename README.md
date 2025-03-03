@@ -20,12 +20,16 @@ cmsrel CMSSW_15_0_0_pre3
 cd CMSSW_15_0_0_pre3/src
 cmsenv
 git cms-init
-git cms-checkout-topic JanGerritSchulz:jgs_ph2_pixelTracking_addSimDoublets
 ```
 
-Add the validation scripts (**NEW** version binned in eta and pt):
+Add the exposed parameters and the validation scripts (**NEW** version binned in eta and pt):
 ```bash
-git cms-rebase-topic elenavernazza:ev_theOptimizer
+git cms-rebase-topic cms-ngt-hlt:ev_theOptimizer
+```
+
+[Optional] If you also need the SimDoublets and working with a release before Jan's PR has been merged:
+```bash
+git cms-rebase-topic JanGerritSchulz:jgs_ph2_pixelTracking_addSimDoublets
 ```
 
 Install the container for The Optimizer:
@@ -138,12 +142,12 @@ Then, start the optimization:
 hlt_pixel_optimization.py \
 -t hltPhase2PixelTracksSoA \
 -v hltPhase2PixelTracks \
--f file:/data/user/evernazz/PixelPatatrack/2025_01_27/CMSSW_15_0_0_pre2/src/29634.402_TTbar_14TeV+Run4D110_Patatrack_PixelOnlyAlpaka/step2.root \
+-f file:../29634.402_TTbar_14TeV+Run4D110_Patatrack_PixelOnlyAlpaka/step2.root \
 --num_threads 32 \
 -a 32 \
 -i 10 \
 -b examples/config.json \
---num_events 100 -o dev 
+--num_events -1 -o test
 ```
 The parameters passed to `optimize_reco.py` are:
 - `-t\--tune`: Name of the module to be tuned
@@ -176,14 +180,14 @@ Then, the `process_to_run.py` is the config actually run by the MOPSO and it use
 All of this happens in an ad-hoc folder and one may continue the previous run by specifing in which folder (`--dir`) the script should look for the previous end state and for how many extra iterations `--continuing`. E.g.
 
 ```bash
-./optimize_reco.py --continuing 10 --dir optimize.step3_pixel_20231123.010104
+./optimize_reco.py --continuing 10 --dir optimize.hlt_pixel_optimization_20250228.141239_test
 ```
 
 </details>
 
 # Plotting the results
 
-This branch also includes scripts for plotting the movement of the particles across different iterations:
+This branch also includes scripts for plotting the movement of the particles across different iterations (**NEW** version binned in eta and pt):
 ```bash
 python3 examples/PlotParticles.py  <folder_name>
 ```

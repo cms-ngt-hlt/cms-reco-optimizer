@@ -9,36 +9,27 @@ try: main_folder = sys.argv[1]
 except: sys.exit(" ### ERROR: Please provide the path to the main folder\n"
     " --> python3 examples/PlotInteractiveMetrics.py optimize.hlt_pixel_optimization_20250127.165402")
 
-keys = ['cellZ0Cut', 'cellPtCut', 'cellMinYSizeB1', 'cellMinYSizeB2', 'cellMaxDYSize12', 'cellMaxDYSize', 'cellMaxDYPred', 
-        'phiCuts0', 'phiCuts1', 'phiCuts2', 'phiCuts3', 'phiCuts4', 'phiCuts5', 'phiCuts6', 'phiCuts7', 'phiCuts8', 'phiCuts9', 'phiCuts10', 
-        'phiCuts11', 'phiCuts12', 'phiCuts13', 'phiCuts14', 'phiCuts15', 'phiCuts16', 'phiCuts17', 'phiCuts18', 'phiCuts19', 'phiCuts20', 
-        'phiCuts21', 'phiCuts22', 'phiCuts23', 'phiCuts24', 'phiCuts25', 'phiCuts26', 'phiCuts27', 'phiCuts28', 'phiCuts29', 'phiCuts30', 
-        'phiCuts31', 'phiCuts32', 'phiCuts33', 'phiCuts34', 'phiCuts35', 'phiCuts36', 'phiCuts37', 'phiCuts38', 'phiCuts39', 'phiCuts40', 
-        'phiCuts41', 'phiCuts42', 'phiCuts43', 'phiCuts44', 'phiCuts45', 'phiCuts46', 'phiCuts47', 'phiCuts48', 'phiCuts49', 'phiCuts50', 
-        'phiCuts51', 'phiCuts52', 'phiCuts53', 'phiCuts54',  
-        '1MinusEfficiency_NegEndcap', 'FakeDuplicateRate_NegEndcap', '1MinusEfficiency_Barrel', 'FakeDuplicateRate_Barrel', '1MinusEfficiency_PosEndcap', 'FakeDuplicateRate_PosEndcap', 
-        '1MinusEfficiency_Pt0_3GeV', 'FakeDuplicateRate_Pt0_3GeV', '1MinusEfficiency_Pt3_10GeV', 'FakeDuplicateRate_Pt3_10GeV', '1MinusEfficiency_Pt10_100GeV', 'FakeDuplicateRate_Pt10_100GeV']
-
 pareto_filename = f'{main_folder}/checkpoint/checkpoint/pareto_front.csv'
 
 metric_1 = "1MinusEfficiency"
 metric_2 = "FakeDuplicateRate"
+vector_cuts = ['phiCuts']
 
 path, name = os.path.split(pareto_filename)
 os.system(f'mkdir -p {path}/Plots')
 
-# df = pd.read_csv(pareto_filename)
-df = pd.read_csv(pareto_filename, skiprows=1, header=None)
-df.columns = keys
+df = pd.read_csv(pareto_filename)
 header = df.keys().to_list()
 
 metrics = [item for item in header if metric_1 in item or metric_2 in item]
-vars = [item for item in header if item not in metrics] # and 'phiCuts' not in item]
+vars = [item for item in header if item not in metrics]
 metrics_pt = [item for item in metrics if "_Pt" in item]
 metrics_eta = [item for item in metrics if item not in metrics_pt]
 
-pt_bins = {item.split(f'_Pt')[-1] for item in metrics_pt}
-eta_bins = {item.split(f'_')[-1] for item in metrics_eta}
+pt_bins = [item.split('_Pt')[-1] for item in metrics_pt]
+eta_bins = [item.split('_')[-1] for item in metrics_eta]
+pt_bins = list(dict.fromkeys(pt_bins))
+eta_bins = list(dict.fromkeys(eta_bins))
 
 def GetMetric (metric):
     if metric_1 in metric: 
@@ -69,7 +60,7 @@ for i_eta, eta_bin in enumerate(eta_bins):
     fake_rates = df[f"{metric_2}_{eta_bin}"] # FakeDuplicateRate
 
     # Scatter plot of all points
-    scatter = ax.scatter(efficiencies, fake_rates, color='red') # [TODO] Change color
+    scatter = ax.scatter(efficiencies, fake_rates, color='green') # [TODO] Change color
     scatter_objects.append(scatter)
 
     # Labels and legend
@@ -91,7 +82,7 @@ for i_pt, pt_bin in enumerate(pt_bins):
     fake_rates = df[f"{metric_2}_Pt{pt_bin}"] # FakeDuplicateRate
 
     # Scatter plot of all points
-    scatter = ax.scatter(efficiencies, fake_rates, color='red') # [TODO] Change color
+    scatter = ax.scatter(efficiencies, fake_rates, color='green') # [TODO] Change color
     scatter_objects.append(scatter)
 
     # Labels and legend
@@ -111,28 +102,30 @@ print(f" ### INFO: Saving {path}/Plots/ParetoFront_Interactive.png")
 plt.savefig(f"{path}/Plots/ParetoFront_Interactive.png")
 plt.savefig(f"{path}/Plots/ParetoFront_Interactive.pdf")
 
-annotation = None
+annotations = []
+picked_annotations = []
 highlighted_scatter = []
-
 i_move = 1
 
+nearest_idx = None
+current_ax = None
+current_scatter = None
+
 def on_hover(event):
+    """Highlight all points corresponding to the selected one, add annotation with coordinates."""
+    global annotations, highlighted_scatter, i_move, nearest_idx, current_ax, current_scatter
 
-    global annotation
-    global highlighted_scatter
-    global i_move
-
-    if event.inaxes is None:  # Ignore if the cursor is outside any axes
+    # Ignore if the cursor is outside any axes
+    if event.inaxes is None:
         return
     
+    # Get coordinates of the cursor
     x_cursor, y_cursor = event.xdata, event.ydata
-
-    nearest_idx = None
-    current_scatter = None
-    min_dist = float('inf')
-    current_ax = event.inaxes  # The subplot where the cursor is
+    current_ax = event.inaxes
 
     # Find the nearest point in the scatter plot that the cursor is hovering over
+    nearest_idx = None
+    min_dist = float('inf')
     for isc, scatter in enumerate(scatter_objects):
         if scatter.axes == current_ax:
             offsets = scatter.get_offsets()
@@ -143,10 +136,12 @@ def on_hover(event):
                     nearest_idx = idx
                     current_scatter = isc
 
-    if nearest_idx is None or min_dist > 0.001:  # Ignore if no close point is found
-        if annotation:
-            annotation.remove()
-            annotation = None
+    # When there is no close point, do nothing
+    if nearest_idx is None or min_dist > 0.001:
+        if annotations:
+            for annotation in annotations:
+                annotation.remove()
+            annotations = []
         if highlighted_scatter:
             for point in highlighted_scatter:
                 point.remove()
@@ -154,46 +149,140 @@ def on_hover(event):
         fig.canvas.draw()
         return
 
-    x_val, y_val = scatter_objects[current_scatter].get_offsets()[nearest_idx]  # Get exact point coordinates
+    # Get coordinates of the closest point
+    x_val, y_val = scatter_objects[current_scatter].get_offsets()[nearest_idx]
 
     # Remove previous highlights
-    if annotation:
-        annotation.remove()
+    if annotations:
+        for annotation in annotations:
+            annotation.remove()
+        annotations = []
     if highlighted_scatter:
         for point in highlighted_scatter:
             point.remove()
+        highlighted_scatter = []
     
-    highlighted_scatter = []  # Reset highlighted points
-
     # Highlight the selected point across all subplots
     for scatter in scatter_objects:
         ax = scatter.axes
         x_point, y_point = scatter.get_offsets()[nearest_idx]
-        point = ax.scatter(x_point, y_point, color='blue', edgecolor='black', s=70)  # Highlight with blue
+        point = ax.scatter(x_point, y_point, color='blue', edgecolor='black', s=70, zorder=5)
         highlighted_scatter.append(point)
 
+    # Bring the current subplot above the others
     scatter_objects[current_scatter].axes.set_zorder(3*(i_move))
 
-    # Add annotation above the selected point in the active subplot
-    text_1 = f'Point {nearest_idx}: ({x_val:.3f}, {y_val:.3f})\n' # coordinates
-    text_2 = textwrap.fill(", ".join([f"{key}: {df.iloc[nearest_idx][key]}" for key in vars]), width=100)
-    annotation = current_ax.annotate(f'{text_1 + text_2}',
-                                     (x_val, y_val),
-                                     textcoords="offset points",
-                                     xytext=(10, 10),
-                                     ha='center',
-                                     fontsize=10,
-                                     color='black',
-                                     bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.3'),
-                                     zorder=7*(i_move))
+    # Display hover
+    text_1 = f'Point {nearest_idx}:\n ({x_val:.3f}, {y_val:.3f})'
+    annotations.append(current_ax.annotate(f'{text_1}', (x_val, y_val), textcoords="offset points", xytext=(0, 10), 
+        ha='center', va='bottom', fontsize=12, color='blue', weight='bold',
+        bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.3'), zorder=7*(i_move)))
+
+    lines = []
+    for key in vars:
+        # Remove vector cuts
+        is_vector = False
+        for vector_cut in vector_cuts:
+            if vector_cut in key:
+                is_vector = True
+        if is_vector: continue
+        if df.iloc[nearest_idx][key] % 1 == 0:
+            # if it's an integer, round it
+            lines.append(f"{key}: {int(df.iloc[nearest_idx][key])}")
+        else:
+            # if it's a float, only print first 3 decimals
+            lines.append(f"{key}: {df.iloc[nearest_idx][key]:.3f}")
+
+    text_2 = "\n".join(lines)
+
+    # Check if training has been performed on phiCuts (int)
+    for vector_cut in vector_cuts:
+        if any(vector_cut in key for key in vars):
+            text_3 = "\n".join(textwrap.wrap(f'{vector_cut} = [' + \
+                ','.join([f'{int(df.iloc[nearest_idx][key])}' for key in vars if vector_cut in key]) + \
+                ']', width=51))
+            text_2 = text_2 + '\n' + text_3
+    
+    annotations.append(current_ax.annotate(f'{text_2}', (x_val, y_val), textcoords="offset points", xytext=(-10, -10), 
+        ha='center', va='top', fontsize=10, color='black', 
+        bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.3'), zorder=7*(i_move)))
 
     fig.canvas.draw()
     i_move += 1
 
-# Connect the event handler for cursor movement
 fig.canvas.mpl_connect('motion_notify_event', on_hover)
 
-# Initialize list to track highlighted points
-highlighted_scatter = []
-
 plt.show()
+
+'''
+The following intractive functions make the visualization very slow
+
+def on_pick(event):
+    """Add picked annotation with cut values when clicking on the point."""
+    global i_move, nearest_idx, current_ax, current_scatter, picked_annotations
+
+    print("Picked point at nearest_idx", nearest_idx)
+
+    if nearest_idx is None:
+        return
+
+    # Check if the point is already annotated (toggle behavior)
+    if picked_annotations:
+        for ann in picked_annotations:
+            ann.remove()
+        picked_annotations = []
+        fig.canvas.draw()
+        return  
+
+    lines = []
+    for key in vars:
+        # Remove vector cuts
+        is_vector = False
+        for vector_cut in vector_cuts:
+            if vector_cut in key:
+                is_vector = True
+        if is_vector: continue
+        if df.iloc[nearest_idx][key] % 1 == 0:
+            # if it's an integer, round it
+            lines.append(f"{key}: {int(df.iloc[nearest_idx][key])}")
+        else:
+            # if it's a float, only print first 3 decimals
+            lines.append(f"{key}: {df.iloc[nearest_idx][key]:.3f}")
+
+    text_2 = "\n".join(lines)
+
+    # Check if training has been performed on phiCuts (int)
+    for vector_cut in vector_cuts:
+        if any(vector_cut in key for key in vars):
+            text_3 = "\n".join(textwrap.wrap(f'{vector_cut} = [' + \
+                ','.join([f'{int(df.iloc[nearest_idx][key])}' for key in vars if vector_cut in key]) + \
+                ']', width=50))
+            text_2 = text_2 + '\n' + text_3
+    
+    print("Text = ", text_2)
+
+    x_val, y_val = scatter_objects[current_scatter].get_offsets()[nearest_idx]
+    picked_annotations.append(current_ax.annotate(f'{text_2}', (x_val, y_val), textcoords="offset points", xytext=(-10, -10), 
+        ha='center', va='top', fontsize=10, color='black', 
+        bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.3'), zorder=7*(i_move)))
+
+    fig.canvas.draw()
+    i_move += 1
+
+fig.canvas.mpl_connect('pick_event', on_pick)
+
+def on_click(event):
+    """Clear all picked annotations when clicking outside a scatter point."""
+    global picked_annotations, min_dist
+
+    if event.inaxes is None:
+        if picked_annotations:
+            for ann in picked_annotations:
+                ann.remove()
+            picked_annotations = []
+            fig.canvas.draw()
+        else:
+            return
+
+fig.canvas.mpl_connect('button_press_event', on_click)
+'''
