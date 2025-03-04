@@ -22,14 +22,14 @@ cmsenv
 git cms-init
 ```
 
-Add the exposed parameters and the validation scripts (**NEW** version binned in eta and pt):
-```bash
-git cms-rebase-topic cms-ngt-hlt:ev_theOptimizer
-```
-
-[Optional] If you also need the SimDoublets and working with a release before Jan's PR has been merged:
+[Optional] Add SimDoublets:
 ```bash
 git cms-rebase-topic JanGerritSchulz:jgs_ph2_pixelTracking_addSimDoublets
+```
+
+Add the exposed parameters and the validation scripts (**NEW** version binned in eta and pt):
+```bash
+git cms-rebase-topic cms-ngt-hlt:ev_TheOptimizer
 ```
 
 Install the container for The Optimizer:
@@ -46,12 +46,6 @@ cd The-Optimizer
 git checkout RemoveNumba
 cd ../..
 ```
-
-<!-- Go back to the `CMSSW_15_0_0_pre3/src` folder and get the validation scripts:
-```bash
-git cms-addpkg Validation/RecoTrack
-curl https://raw.githubusercontent.com/AdrianoDee/cmssw/6d1a41ac921c5c4f191b7a3d46aabbfa577ee9db/Validation/RecoTrack/plugins/SimpleValidation.cc -o Validation/RecoTrack/plugins/SimpleValidation.cc
-``` -->
 
 Finally, compile:
 ```bash
@@ -94,7 +88,7 @@ cmsRun step2_DIGI_L1TrackTrigger_L1_L1P2GT_DIGI2RAW_HLT_PU.py
 
 ### Plot of the SimDoublets before optimizing
 
-To plot the doublets before optimizing the cuts, use the analyzer in `src/Validation/TrackingMCTruth/test`".
+[Optional] To plot the doublets before optimizing the cuts, use the SimDoublets analyzer in `src/Validation/TrackingMCTruth/test`".
 Change the input file location and run:
 ```bash
 cmsRun simDoublets_TEST.py
@@ -133,6 +127,7 @@ is a regular CMSSW configuration that runs the HLT reconstruction and validation
 Having these 2 files, The Optimizer can be run. First, source The Optimizer path from within the `cms-reco-optimizer` folder:
 
 ```bash
+cd cms-reco-optimizer
 export PYTHONPATH=${PYTHONPATH}:$PWD/The-Optimizer
 ```
 
