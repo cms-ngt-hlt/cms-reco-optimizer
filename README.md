@@ -82,17 +82,41 @@ runTheMatrix.py -w upgrade -l 29634.402 -j 0
 
 Run the first two steps:
 ```bash
-cmsRun TTbar_14TeV_TuneCP5_cfi_GEN_SIM.py
-cmsRun step2_DIGI_L1TrackTrigger_L1_L1P2GT_DIGI2RAW_HLT_PU.py
+cmsRun -n 0 TTbar_14TeV_TuneCP5_cfi_GEN_SIM.py
+cmsRun -n 0 step2_DIGI_L1TrackTrigger_L1_L1P2GT_DIGI2RAW_HLT_PU.py
 ```
 
-### Plot of the SimDoublets before optimizing
+### [OPTIONAL] Plot of the SimDoublets before optimizing
 
-[Optional] To plot the doublets before optimizing the cuts, use the SimDoublets analyzer in `src/Validation/TrackingMCTruth/test`".
+To plot the doublets before optimizing the cuts, use the SimDoublets analyzer in `src/Validation/TrackingMCTruth/test`".
 Change the input file location and run:
 ```bash
-cmsRun simDoublets_TEST.py
-cmsRun simDoublets_HARVESTING.py
+cmsRun simDoubletsPhase2_TEST.py
+cmsRun simDoubletsPhase2_HARVESTING.py
+```
+
+The histograms are stored in the `DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root` file.
+You can download the sakura package to plot the distributions with the current cuts. Instructions are taken from [this repo](https://github.com/JanGerritSchulz/sakura/tree/master).
+
+Install the package:
+```bash
+git clone https://github.com/JanGerritSchulz/sakura.git
+cd sakura
+```
+
+If you are on a machine where pip install works:
+```bash
+pip3 install .
+```
+Otherwise:
+```bash
+export PYTHONPATH=${PYTHONPATH}:$PWD/sakura
+```
+
+Produce the plots:
+```bash
+python3 simplotter/makeCutPlots.py ../Validation/TrackingMCTruth/test/DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root ../src/Validation/TrackingMCTruth/test/simDoubletsPhase2_TEST.py -d TTbar_14Tev -n -1 -a simDoubletsAnalyzerPhase2
+python3 simplotter/makeGeneralPlots.py ../Validation/TrackingMCTruth/test/DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root -d TTbar_14Tev -n -1
 ```
 
 # Run The-Optimizer
