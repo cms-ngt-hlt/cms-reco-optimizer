@@ -181,11 +181,7 @@ def on_hover(event):
     lines = []
     for key in vars:
         # Remove vector cuts
-        is_vector = False
-        for vector_cut in vector_cuts:
-            if vector_cut in key:
-                is_vector = True
-        if is_vector: continue
+        if any(vector_cut in key for vector_cut in vector_cuts): continue
         if df.iloc[nearest_idx][key] % 1 == 0:
             # if it's an integer, round it
             lines.append(f"{key}: {int(df.iloc[nearest_idx][key])}")
