@@ -1,8 +1,8 @@
 {   
     "cellZ0Cut":{
         "down":0.001,
-        "up":10,
-        "value_type":"int"
+        "up":50,
+        "value_type":"double"
     },
     "cellPtCut":{
         "down":0,
@@ -31,7 +31,7 @@
     },
     "cellMaxDYPred":{
         "down":0,
-        "up":80,
+        "up":200,
         "value_type":"int"
     },
     "phiCuts":{
