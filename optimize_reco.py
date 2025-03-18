@@ -3,7 +3,7 @@ import optimizer
 from optimizer import MOPSO
 import subprocess
 import itertools
-from utils import get_binned_metrics, get_binned_metrics_names, write_csv, parseProcess, spinner, read_csv
+from utils import get_metrics, get_metrics_names, get_binned_metrics, get_binned_metrics_names, write_csv, parseProcess, spinner, read_csv
 from graphs import convert_to_graph, from_modules_to_module
 import numpy as np
 import uproot
@@ -39,9 +39,10 @@ parser.add_argument('-i', '--num_iterations', default=100, type=int, action='sto
 parser.add_argument('-d', '--dir', type=str, action='store', help = "Directory where to continue.", required = is_continuing)  
 parser.add_argument('-b', '--bounds', help='Bounds json file with dictionary for upper, lower bound and type of params', required = not is_continuing)
 parser.add_argument('-p', '--pars', help='Parameters to tune. \n These may be given as a comma-separated list of parameters names. When not specified, all parameters in the config json will be optimized.')
-parser.add_argument('--check', action='store_true', help = "Run the config once before the optimizer.")
-parser.add_argument('--debug', action='store_true', help = "Debug printouts.")
-parser.add_argument('--continuing', type=str, default=None)
+parser.add_argument('--binned_metrics', action='store_true', help = "Run the config once before the optimizer.")
+parser.add_argument('--check',          action='store_true', help = "Run the config once before the optimizer.")
+parser.add_argument('--debug',          action='store_true', help = "Debug printouts.")
+parser.add_argument('--continuing',     type=str, default=None)
 
 ## cmsRun parameters
 parser.add_argument('-t', '--tune', nargs='+', help='List of modules to tune.', required = not is_continuing)
@@ -53,6 +54,18 @@ parser.add_argument('--reco', nargs='?', choices=allowed_recos,help='Type of rec
 parser.add_argument('-T', '--timing', action='store_true', help = "Add timing/throughput for the pareto front.")
 
 args = parser.parse_args()
+
+def get_general_metrics (uproot_file, id):
+    if args.binned_metrics:
+        return get_binned_metrics(uproot_file, id)
+    else:
+        return get_metrics(uproot_file, id)
+
+def get_general_metrics_names ():
+    if args.binned_metrics:
+        return get_binned_metrics_names()
+    else:
+        return get_metrics_names()
 
 # run pixel reconstruction and simple validation
 def reco_and_validate(params,config,**kwargs):#,timing=False):
@@ -81,7 +94,7 @@ def reco_and_validate(params,config,**kwargs):#,timing=False):
         subprocess.run(command,stdout = stdout, stderr = stderr)
     
     with uproot.open(validation_result) as uproot_file:
-        population_fitness = [get_binned_metrics(uproot_file, i) for i in range(num_particles)]
+        population_fitness = [get_general_metrics(uproot_file, i) for i in range(num_particles)]
 
     return population_fitness
   
@@ -102,7 +115,7 @@ def print_logo():
 def copy_to_unique(c):
 
     formatted_date = datetime.now().strftime("%Y%m%d.%H%M%S")
-    b = "./optimize."+c.replace(".py","")+"_"+formatted_date #str(random.getrandbits(64))
+    b = "./optimize."+formatted_date #str(random.getrandbits(64))
     if args.out_name:
         b = b+"_"+args.out_name
     os.mkdir(b)
@@ -243,8 +256,6 @@ if __name__ == "__main__":
             param_names += [key]
         else: 
             param_names += [f'{key}{i}' for i in range(len(filtered_dict[key]["down"]))]
-    
-    print(" ### DEBUG: param_names = ", param_names)
 
     ## Handling parameter values in input
     print_headers("> Parameter values:")
@@ -288,6 +299,12 @@ if __name__ == "__main__":
             new.write('chain\t= %s\n'%repr([ f for f in modules_to_modify if "@" not in f]))
             new.write('params\t= %s\n'%repr(params))
             new.write('target\t= %s\n\n'%repr(module_to_valid))
+            if args.binned_metrics:
+                new.write('from utils import expand_process_binned\n')
+                new.write('process = expand_process_binned(process,inputs,params,tune,chain,target)\n')
+            else:
+                new.write('from utils import expand_process\n')
+                new.write('process = expand_process(process,inputs,params,tune,chain,target)\n')                
             new.write(add.read())
     
     if args.check:
@@ -302,9 +319,25 @@ if __name__ == "__main__":
     print("> > Number of agents    :",args.num_particles)
     print("> > Number of iterations:",args.num_iterations)
 
+    SingleMuConfig = {
+        'cellMinYSizeB1': 10,
+        'cellMinYSizeB2': 10,
+        'cellZ0Cut': 15,
+        'cellMaxDYSize12': 12,
+        'cellMaxDYSize': 10,
+        'cellMaxDYPred': 26,
+        'cellPtCut': 0.85,
+    }
+    initial_values = [SingleMuConfig[key] for key in param_names]
+
+    print(" ### DEBUG: param_names = ", param_names)
+    print(" ### DEBUG: lower_bounds = ", lb)
+    print(" ### DEBUG: upper_bounds = ", ub)
+    print(" ### DEBUG: initial_values = ", initial_values)
+
     pso = MOPSO(objective=objective, lower_bounds=lb, upper_bounds=ub, 
-                num_particles=args.num_particles,
-                param_names=param_names, metric_names=get_binned_metrics_names())
+                num_particles=args.num_particles, default_point=np.array(initial_values, dtype=object),
+                param_names=param_names, metric_names=get_general_metrics_names())
     
     pso.optimize(num_iterations=args.num_iterations)
     

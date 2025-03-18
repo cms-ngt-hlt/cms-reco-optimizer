@@ -26,7 +26,7 @@ except:
 
 # calculate the metrics from validation results
 def get_metrics(uproot_file, id):
-    tree = uproot_file['simpleValidation' + str(id)]['output']
+    tree = uproot_file['SimpleTrackValidation' + str(id)]['output']
     total_rec = tree['rt'].array()[0]
     total_ass = tree['at'].array()[0]
     total_ass_sim = tree['ast'].array()[0]
@@ -113,7 +113,7 @@ def is_float(value):
 def read_csv(filename):
 
     # unpack option helps preserving the type when dealing with mixed type matrices, but requires to transpose back with .T
-    matrix = np.array(np.genfromtxt(filename, delimiter=",", dtype=None, unpack=True), dtype=object).T
+    matrix = np.array(np.genfromtxt(filename, delimiter=",", dtype=None, unpack=True, ndmin=1), dtype=object).T
     return matrix
 
 # write a matrix to a csv file preserving integer and float types
@@ -204,6 +204,54 @@ def add_validation(process,inputs,target):
             hitassoc = getattr(f,"associator").value()
             break
     
+    taskList = []
+    for i,_ in enumerate(inputs):
+        
+        # All these params may be copied from the MTV defined in the process
+        name = 'SimpleTrackValidation' + str(i)
+        setattr(process, name, cms.EDAnalyzer('SimpleTrackValidation',
+                chargedOnlyTP = cms.bool(True),
+                intimeOnlyTP = cms.bool(False),
+                invertRapidityCutTP = cms.bool(False),
+                lipTP = cms.double(30.0),
+                maxPhiTP = cms.double(3.2),
+                maxRapidityTP = cms.double(2.5),
+                minHitTP = cms.int32(0),
+                minPhiTP = cms.double(-3.2),
+                minRapidityTP = cms.double(-2.5),
+                pdgIdTP = cms.vint32(),
+                ptMaxTP = cms.double(1e+100),
+                ptMinTP = cms.double(0.0),
+                signalOnlyTP = cms.bool(True),
+                stableOnlyTP = cms.bool(False),
+                tipTP = cms.double(3.5),
+                trackLabels = cms.VInputTag(target + str(i)),
+                trackAssociator = cms.untracked.InputTag(hitassoc),
+                trackingParticles = cms.InputTag('mix', 'MergedTrackTruth')               
+            )
+        )
+
+        taskList.append(getattr(process, name))
+
+    process.simpleValidationSeq = cms.Sequence(sum(taskList[1:],taskList[0]))
+    process.simpleValidationPath = cms.EndPath(process.simpleValidationSeq)
+    process.schedule.extend([process.simpleValidationPath])
+
+    return process
+
+
+def add_validation_binned(process,inputs,target):
+
+    # Here we assume that the process we have given in input has already the 
+    # validation and the prevalidation well defined and so we just track
+    # back wich hit associator we need to use
+    hitassoc = ""
+    for f in modules_by_type(process,"TrackAssociatorEDProducer"):
+        #print(getattr(f,"label_tr"))
+        if getattr(f,"label_tr").value() == target:
+            hitassoc = getattr(f,"associator").value()
+            break
+    
     taskList_eta = []
     taskList_pt = []
     for i,_ in enumerate(inputs):
@@ -222,7 +270,7 @@ def add_validation(process,inputs,target):
                 minRapidityTP = cms.double(-4),
                 pdgIdTP = cms.vint32(),
                 ptMaxTP = cms.double(1e+100),
-                ptMinTP = cms.double(0.9),
+                ptMinTP = cms.double(0.0),
                 signalOnlyTP = cms.bool(True),
                 stableOnlyTP = cms.bool(False),
                 tipTP = cms.double(3.5),
@@ -259,8 +307,6 @@ def add_validation(process,inputs,target):
         )
 
         taskList_pt.append(getattr(process, name))
-
-    # import pdb; pdb.set_trace()
 
     process.SimpleTrackValidationEtaBinsSeq = cms.Sequence(sum(taskList_eta[1:],taskList_eta[0]))
     process.SimpleTrackValidationPtBinsSeq = cms.Sequence(sum(taskList_pt[1:],taskList_pt[0]))
@@ -299,6 +345,13 @@ def expand_process(process,inputs,params,tune,chain,target):
     process = add_validation(process,inputs,target)
     process = chain_update(process,inputs,tune,chain+[target])
     
-
     return process
-            
+
+def expand_process_binned(process,inputs,params,tune,chain,target):
+    
+    process = remove_outputs(process) #check for all EndPaths 
+    process = modules_tuning(process,inputs,params,tune)
+    process = add_validation_binned(process,inputs,target)
+    process = chain_update(process,inputs,tune,chain+[target])
+    
+    return process
