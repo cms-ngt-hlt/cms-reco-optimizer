@@ -95,6 +95,11 @@ cmsRun simDoubletsPhase2_TEST.py
 cmsRun simDoubletsPhase2_HARVESTING.py
 ```
 
+In order to remove the pt cut, add this line to `simDoubletsPhase2_TEST.py`
+```python
+process.simDoubletsProducerPhase2.TrackingParticleSelectionConfig.ptMin = cms.double(0.) 
+```
+
 The histograms are stored in the `DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root` file.
 You can download the sakura package to plot the distributions with the current cuts. Instructions are taken from [this repo](https://github.com/JanGerritSchulz/sakura/tree/master).
 
@@ -115,8 +120,8 @@ export PYTHONPATH=${PYTHONPATH}:$PWD/sakura
 
 Produce the plots:
 ```bash
-python3 simplotter/makeCutPlots.py ../Validation/TrackingMCTruth/test/DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root ../src/Validation/TrackingMCTruth/test/simDoubletsPhase2_TEST.py -d TTbar_14Tev -n -1 -a simDoubletsAnalyzerPhase2
-python3 simplotter/makeGeneralPlots.py ../Validation/TrackingMCTruth/test/DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root -d TTbar_14Tev -n -1
+makeCutPlots DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root ../Validation/TrackingMCTruth/test/simDoubletsPhase2_TEST.py -d Sakura -n -1 -a simDoubletsAnalyzerPhase2
+makeGeneralPlots DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root -d Sakura -n -1
 ```
 
 # Run The-Optimizer
@@ -204,19 +209,37 @@ All of this happens in an ad-hoc folder and one may continue the previous run by
 
 </details>
 
-# Plotting the results
+# Plotting the results and validate
 
 This branch also includes scripts for plotting the movement of the particles across different iterations (**NEW** version binned in eta and pt):
 ```bash
-python3 examples/PlotParticles.py  <folder_name>
+python3 examples/PlotParticles.py  --dir <folder_name>
 ```
 
 To plot the pareto front (**NEW** version binned in eta and pt):
 ```bash
-python3 examples/PlotMetrics.py <folder_name>
+python3 examples/PlotMetrics.py --dir <folder_name> --best_efficiency --interactive
 ```
 
-To plot the pareto front interactively (**NEW** version binned in eta and pt):
+To validate the new configuration:
 ```bash
-python3 examples/PlotInteractiveMetrics.py <folder_name>
+python3 examples/GetConfigAndValidate.py --dir <folder_name> --validate
 ```
+Insert the point number you selected, and run the commands for the validation.
+
+The plot the new configuration
+
+
+<!-- [Optional] Compare the metrics obtained fro your point and the default configuration:
+```bash
+cd optimize.hlt_pixel_optimization_20250306.175419_TTBar_SplitBinnedMetricsNoTPselector_AllScalarCuts
+cmsRun -n 0 process_to_run.py parametersFile=checkpoint/checkpoint/Configuration/old_point.csv outputFile=checkpoint/checkpoint/Configuration/old_point.root
+cmsRun -n 0 process_to_run.py parametersFile=checkpoint/checkpoint/Configuration/new_point43.csv outputFile=checkpoint/checkpoint/Configuration/new_point43.root
+python3 example/PlotPoint.py 
+``` -->
+
+<!-- 
+cmsDriver.py step2 -s DIGI:pdigi_valid,L1TrackTrigger,L1,L1P2GT,DIGI2RAW,HLT:75e33,VALIDATION --conditions auto:phase2_realistic_T33 --datatier GEN-SIM-DIGI-RAW,DQMIO -n -1 --eventcontent FEVTDEBUGHLT,DQMIO --geometry ExtendedRun4D110 --era Phase2C17I13M9 --procModifiers alpaka --nThreads 1 --filein file:step1.root
+
+cmsDriver.py step5 -s HARVESTING:@trackingOnlyValidation+@HLTMon+postProcessorHLTtrackingSequence --conditions auto:phase2_realistic_T33 --mc --geometry ExtendedRun4D110 --scenario pp --filetype DQM --era Phase2C17I13M9 -n 10 --filein file:step2_DIGI_L1TrackTrigger_L1_L1P2GT_DIGI2RAW_HLT_VALIDATION_inDQM.root 
+-->
