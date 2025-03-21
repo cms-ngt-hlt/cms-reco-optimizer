@@ -5,7 +5,10 @@ import numpy as np
 '''
 To run:
     python3 examples/GetConfigAndValidate.py --dir optimize.hlt_pixel_optimization_20250127.165402
+    python3 examples/GetConfigAndValidate.py --dir optimize.hlt_pixel_optimization_20250127.165402 --num 1000
     python3 examples/GetConfigAndValidate.py --dir optimize.hlt_pixel_optimization_20250127.165402 --validate
+    python3 examples/GetConfigAndValidate.py --dir optimize.hlt_pixel_optimization_20250127.165402 --simdoublets
+    python3 examples/GetConfigAndValidate.py --dir optimize.hlt_pixel_optimization_20250127.165402 --point 0
 '''
 
 if __name__ == "__main__" :
@@ -13,8 +16,14 @@ if __name__ == "__main__" :
     from optparse import OptionParser
     parser = OptionParser()
     parser.add_option("--dir",              dest="dir",             default=None,      help='Name for the input directory',         type=str           )
-    parser.add_option("--validate",         dest="validate",        default=None,      help='Run the validation',                   action='store_true')
+    parser.add_option("--validate",         dest="validate",        default=None,      help='Run the validation on hltPhase2Pixel', action='store_true')
+    parser.add_option("--simdoublets",      dest="simdoublets",     default=None,      help='Run the validation on SimDoublets',    action='store_true')
+    parser.add_option("--point",            dest="point",           default=None,      help='Selected point for validation',        type=int           )
+    parser.add_option("--num",              dest="num",             default=100,       help='Number of events',                     type=int           )
     (options, args) = parser.parse_args()
+
+    step1_path = '/eos/cms/store/relval/CMSSW_15_0_0_pre3/RelValTTbar_14TeV/GEN-SIM-DIGI-RAW/PU_141X_mcRun4_realistic_v3_STD_Run4D110_PU-v2/2580000/01b8c5dd-42a1-46b7-8607-f4c990ba3ab3.root' # [TO BE CHANGED]
+    step2_path = '/eos/cms/store/relval/CMSSW_15_0_0_pre3/RelValTTbar_14TeV/GEN-SIM-DIGI-RAW/PU_141X_mcRun4_realistic_v3_STD_Run4D110_PU-v2/2580000/01b8c5dd-42a1-46b7-8607-f4c990ba3ab3.root' # [TO BE CHANGED]
 
     if not options.dir:
         sys.exit(" ### ERROR: Please provide the path to the main folder\n"
@@ -73,7 +82,8 @@ if __name__ == "__main__" :
 
     print(f"\n ### INFO: Saving original configuration to\n{old_out_name}\n")
 
-    config = input(" >>> Which point of the pareto front would you like to use [number or 'default']? >>> ")
+    if options.point: config = options.point
+    else: config = input(" >>> Which point of the pareto front would you like to use [number or 'default']? >>> ")
 
     if not config == 'default':
         point = int(config)
@@ -141,7 +151,10 @@ if __name__ == "__main__" :
         print(f"\n ### INFO: This is the line you have selected:\n{new_line}")
         np.savetxt(f"{output_folder}/new_point{point}.csv", np.matrix(new_line), fmt=fmt, delimiter=',')
 
+    ######################################################
     # Prepare the validation with the new config
+    ######################################################
+
     if options.validate:
 
         if not config == 'default':
@@ -157,12 +170,11 @@ if __name__ == "__main__" :
         os.system(f'mkdir -p {output_folder}/{folder}')
 
         # Produce step 2 configuration
-        step1_path = '/data/evernazz/2025_03_05/CMSSW_15_0_0_pre3/src/29634.402_TTbar_14TeV+Run4D110_Patatrack_PixelOnlyAlpaka/step1.root' # [TO BE CHANGED]
         print(f"\n ### INFO: Preparing step2 configuration")
         python_step2 = f'{output_folder}/{folder}/step2_DIGI_L1TrackTrigger_L1_L1P2GT_DIGI2RAW_HLT_VALIDATION.py'
-        command = f'cmsDriver.py step2 -s DIGI:pdigi_valid,L1TrackTrigger,L1,L1P2GT,DIGI2RAW,HLT:75e33,VALIDATION'
-        command += f' --conditions auto:phase2_realistic_T33 --datatier GEN-SIM-DIGI-RAW,DQMIO -n 100 --no_exec'
-        command += f' --eventcontent FEVTDEBUGHLT,DQMIO --geometry ExtendedRun4D110 --era Phase2C17I13M9 --procModifiers alpaka'
+        command = f'cmsDriver.py step2 -s L1P2GT,HLT:75e33,VALIDATION'
+        command += f' --conditions auto:phase2_realistic_T33 --datatier GEN-SIM-DIGI-RAW,DQMIO -n {options.num} --no_exec'
+        command += f' --processName HLTX --eventcontent FEVTDEBUGHLT,DQMIO --geometry ExtendedRun4D110 --era Phase2C17I13M9 --procModifiers alpaka'
         command += f' --python_filename {python_step2}'
         command += f' --filein file:{step1_path} --fileout file:step2.root'
         print(command)
@@ -194,7 +206,94 @@ if __name__ == "__main__" :
         print(command)
         os.system(f'{command}')
 
-        print(f"\n ### INFO: To run\n")
-        print(f" cd {output_folder}/{folder}")
-        print(f" cmsRun -n 0 step2_DIGI_L1TrackTrigger_L1_L1P2GT_DIGI2RAW_HLT_VALIDATION.py")
-        print(f" cmsRun step5_HARVESTING.py")
+        print(f"\n >>>>>>>>>>>> To run the hltPhase2Pixel validation \n")
+        print(f"    cd {output_folder}/{folder}")
+        print(f"    cmsRun -n 0 step2_DIGI_L1TrackTrigger_L1_L1P2GT_DIGI2RAW_HLT_VALIDATION.py")
+        print(f"    cmsRun step5_HARVESTING.py")
+        print(f"    makeTrackValidationPlots.py DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root")
+
+    ######################################################
+    # Prepare the plots of simDoublets with the new config
+    ######################################################
+    
+    if options.simdoublets:
+
+        if not config == 'default':
+            folder = f'new_point{point}'
+        else:
+            folder = 'default'
+
+        # Modify analyzer with current config
+        initial_config_file = f'{cms_base}/src/Validation/TrackingMCTruth/test/simDoubletsPhase2_TEST.py'
+        os.system(f'mkdir -p {output_folder}/{folder}')
+        os.system(f'mkdir -p {output_folder}/{folder}/SimDoublets')
+        
+        if not config == 'default':
+
+            custom_lines = f'# From optimized configuration\n'
+            for var in vars:
+                # Remove vector cuts
+                if any(vector_cut in var for vector_cut in vector_cuts):
+                    continue
+                else:
+                    if params_bounds[var]['value_type'] == 'int':
+                        value = int(df.iloc[point][var])
+                        custom_lines += f'process.simDoubletsAnalyzerPhase2.{var} = cms.int32({value})\n'
+                    else:
+                        value = round(float(df.iloc[point][var]), 3) # only store 3 digits
+                        custom_lines += f'process.simDoubletsAnalyzerPhase2.{var} = cms.double({value})\n'
+                    
+                    old_line.append(getattr(modified_hltPhase2PixelTracksSoA, var).value())
+                    setattr(modified_hltPhase2PixelTracksSoA, var, value)
+                    new_line.append(value)
+            for vector_cut in vector_cuts:
+                if any(vector_cut in var for var in vars):
+                    len_vector_value = sum([vector_cut in var for var in vars])
+                    if params_bounds[vector_cut]['value_type'] == 'int':
+                        vector_value = [int(df.iloc[point][f'{vector_cut}{i}']) for i in range(len_vector_value)]
+                        custom_lines += f'process.simDoubletsAnalyzerPhase2.{vector_cut} = cms.vint32({vector_value})\n'
+                    else:
+                        vector_value = [round(float(df.iloc[point][f'{vector_cut}{i}']), 3) for i in range(len_vector_value)]
+                        custom_lines += f'process.simDoubletsAnalyzerPhase2.{vector_cut} = cms.vint32({vector_value})\n'
+
+            # Read default analyzer
+            with open(initial_config_file, "r") as file:
+                default_lines = file.readlines()
+            
+            new_lines = ''
+            for i, line in enumerate(default_lines):
+                # Modify input files
+                if "inputFile =" in line:
+                    new_lines += f'inputFile = "{step2_path}"'
+                # Modify number of events
+                elif "    input = cms.untracked.int32(-1)," in line:
+                    new_lines += f'    input = cms.untracked.int32({options.num}),\n'
+                # Add new config
+                elif "process.simDoubletsProducerPhase2.TrackingParticleSelectionConfig.ptMin = cms.double(0.)" in line:
+                    new_lines += line+'\n'
+                    if not config == 'default':
+                        new_lines += custom_lines+'\n'
+                else:
+                    new_lines += line
+
+            new_config_file = f'simDoubletsPhase2_new_point{point}_TEST.py'
+            new_config_path = f'{output_folder}/{folder}/SimDoublets/{new_config_file}'
+            print(f"\n ### INFO: Creating analyzer {new_config_path}")
+            with open(new_config_path, "w") as file:
+                file.writelines(map(str, new_lines))
+            
+        else:
+            new_config_file = 'simDoubletsPhase2_TEST.p'
+            new_config_path = f'{output_folder}/{folder}/SimDoublets/{new_config_file}'
+            os.system(f'cp {initial_config_file} {new_config_path}')
+            print(f"\n ### INFO: Copy default analyzer in {new_config_path}")
+
+        harvesting_file = f'{cms_base}/src/Validation/TrackingMCTruth/test/simDoubletsPhase2_HARVESTING.py'
+        os.system(f'cp {harvesting_file} {output_folder}/{folder}/SimDoublets/simDoubletsPhase2_HARVESTING.py')
+        print(f"\n ### INFO: Copy harvester to {output_folder}/{folder}/SimDoublets/simDoubletsPhase2_HARVESTING.py")
+
+        print(f"\n >>>>>>>>>>>> To run the SimDoublets validation \n")
+        print(f"    cd {output_folder}/{folder}/SimDoublets")
+        print(f"    cmsRun -n 0 {new_config_file}")
+        print(f"    cmsRun simDoubletsPhase2_HARVESTING.py")
+        print(f"    makeCutPlots DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root {new_config_file} -d Sakura -n -1 -a simDoubletsAnalyzerPhase2 -d ./")
