@@ -52,6 +52,9 @@ if __name__ == "__main__" :
     pt_bins = list(dict.fromkeys(pt_bins))
     eta_bins = list(dict.fromkeys(eta_bins))
 
+    # import pdb
+    # pdb.set_trace()
+
     def GetMetric (metric):
         if metric_1 in metric: 
             return 'Efficiency'
@@ -93,7 +96,7 @@ if __name__ == "__main__" :
             fake_rates = df[f"{metric_2}_{eta_bin}"] # FakeDuplicateRate
 
             # Scatter plot of all points
-            scatter = ax.scatter(efficiencies, fake_rates, color='blue')
+            scatter = ax.scatter(efficiencies, fake_rates, color='blue', alpha=0.5)
             scatter_objects.append(scatter)
             axs_objects.append(ax)
 
@@ -105,8 +108,8 @@ if __name__ == "__main__" :
             ax.tick_params(axis='x', labelsize=title_size)
             ax.tick_params(axis='y', labelsize=title_size)
             ax.set_xlim(0,1)
-            ax.set_ylim(0.001,1)
-            ax.set_yscale('log')
+            ax.set_ylim(0.01,1)
+            # ax.set_yscale('log')
             ax.grid(alpha=0.3)
 
         for i_pt, pt_bin in enumerate(pt_bins):
@@ -117,7 +120,7 @@ if __name__ == "__main__" :
             fake_rates = df[f"{metric_2}_Pt{pt_bin}"] # FakeDuplicateRate
 
             # Scatter plot of all points
-            scatter = ax.scatter(efficiencies, fake_rates, color='blue')
+            scatter = ax.scatter(efficiencies, fake_rates, color='blue', alpha=0.5)
             scatter_objects.append(scatter)
             axs_objects.append(ax)
 
@@ -131,8 +134,8 @@ if __name__ == "__main__" :
             ax.tick_params(axis='x', labelsize=title_size)
             ax.tick_params(axis='y', labelsize=title_size)
             ax.set_xlim(0,1)
-            ax.set_ylim(0.001,1)
-            ax.set_yscale('log')
+            ax.set_ylim(0.01,1)
+            # ax.set_yscale('log')
             ax.grid(alpha=0.3)
         # Hide unused subplots (if eta_bins and pt_bins are of different lengths)
         for i in range(len(pt_bins), n_cols):
@@ -155,7 +158,7 @@ if __name__ == "__main__" :
         fake_rates = df[f"{metric_2}"] # FakeDuplicateRate
 
         # Scatter plot of all points
-        scatter = ax.scatter(efficiencies, fake_rates, color='blue')
+        scatter = ax.scatter(efficiencies, fake_rates, color='blue', alpha=0.5)
         scatter_objects.append(scatter)
         axs_objects.append(ax)
 
@@ -167,7 +170,7 @@ if __name__ == "__main__" :
         ax.tick_params(axis='y', labelsize=title_size)
         ax.set_xlim(0,1)
         ax.set_ylim(0.001,1)
-        ax.set_yscale('log')
+        # ax.set_yscale('log')
         ax.grid(alpha=0.3)
 
         plt.tight_layout()
@@ -257,7 +260,7 @@ if __name__ == "__main__" :
         scatter_objects[current_scatter].axes.set_zorder(3*(i_move))
 
         lines = []
-        for key in vars:
+        for key in sorted(vars):
             # Remove vector cuts
             if any(vector_cut in key for vector_cut in vector_cuts): continue
             if df.iloc[nearest_idx][key] % 1 == 0:
