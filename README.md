@@ -185,6 +185,7 @@ The parameters passed to `optimize_reco.py` are:
 - `-o` optional output tag for the foder name
 - `-i\--num_iterations` the number of iterations
 - `--debug` to run in debug mode (helpful when the error in the subprocess running `cmsRun`)
+- `--binned_metrics` activate the binned metrics in eta and pt
 
 <details>
 <summary>Executing the command, `optimize_reco.py` will run the following steps:</summary>
@@ -209,7 +210,7 @@ All of this happens in an ad-hoc folder and one may continue the previous run by
 
 </details>
 
-# Plotting the results and validate
+## Plotting the results and validate
 
 This branch also includes scripts for plotting the movement of the particles across different iterations (**NEW** version binned in eta and pt):
 ```bash
@@ -223,12 +224,24 @@ python3 examples/PlotMetrics.py --dir <folder_name> --best_efficiency --interact
 
 To validate the new configuration:
 ```bash
-python3 examples/GetConfigAndValidate.py --dir <folder_name> --validate
+python3 examples/GetConfigAndValidate.py --dir <folder_name> --validate --simdoublets
 ```
 Insert the point number you selected, and run the commands for the validation.
 
-The plot the new configuration
+The plot the new configuration install the utils package:
+```bash
+git clone git@github.com:cms-ngt-hlt/utils.git
+```
 
+Create your configuration in `Utils/json/myconfig.json` and run
+```bash
+python3 plotter.py json/myconfig.json
+```
+
+<!-- Or:
+```bash
+python3 examples/ValidationPlots.py --dir optimize.hlt_pixel_optimization_20250127.165402
+``` -->
 
 <!-- [Optional] Compare the metrics obtained fro your point and the default configuration:
 ```bash
