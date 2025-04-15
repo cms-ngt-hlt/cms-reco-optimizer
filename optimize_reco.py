@@ -79,8 +79,11 @@ def reco_and_validate(params,config,**kwargs):#,timing=False):
     
     # writing current input parameters from mopso
     write_csv('temp/parameters.csv', params)
-    validation_result = 'temp/simple_validation.root'
-    
+    for i in range(0, args.num_iterations + 1):
+        validation_result = f'temp/simple_validation{i}.root'
+        if not os.path.exists(os.path.join(os.getcwd(), validation_result)):
+            break
+
     # redirecting outputs to logs
     logfiles = tuple('%s/logs/%s' % (workdir, name) for name in ['process_last_out', 'process_last_err'])
     stdout = open(logfiles[0], 'w')
