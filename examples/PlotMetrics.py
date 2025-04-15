@@ -41,6 +41,8 @@ if __name__ == "__main__" :
     df = pd.read_csv(pareto_filename)
     header = df.keys().to_list()
 
+    plot_ref = True
+
     # Split header into variables and metrics
     metrics = [item for item in header if metric_1 in item or metric_2 in item]
     vars = [item for item in header if item not in metrics]
@@ -52,14 +54,11 @@ if __name__ == "__main__" :
     pt_bins = list(dict.fromkeys(pt_bins))
     eta_bins = list(dict.fromkeys(eta_bins))
 
-    # import pdb
-    # pdb.set_trace()
-
     def GetMetric (metric):
         if metric_1 in metric: 
             return 'Efficiency'
         if metric_2 in metric:
-            return 'Fake + Duplicate Rate'
+            return 'Fake Rate'
         return metric
 
     def ConvertMetricBinName (metric):
@@ -88,6 +87,8 @@ if __name__ == "__main__" :
         scatter_objects = []
         axs_objects = []
 
+        old_eff = [0.8348240906380441, 0.7068607068607069, 0.8415637860082305]
+        old_fake = [0.14919501585706116, 0.050137516552918406, 0.14759909202025492]
         for i_eta, eta_bin in enumerate(eta_bins):
 
             ax = axs[0][i_eta]
@@ -96,9 +97,12 @@ if __name__ == "__main__" :
             fake_rates = df[f"{metric_2}_{eta_bin}"] # FakeDuplicateRate
 
             # Scatter plot of all points
-            scatter = ax.scatter(efficiencies, fake_rates, color='blue', alpha=0.5)
+            scatter = ax.scatter(efficiencies, fake_rates, color='blue', alpha=0.5, label='Pareto Front')
             scatter_objects.append(scatter)
             axs_objects.append(ax)
+
+            # Add default point
+            ax.scatter(old_eff[i_eta], old_fake[i_eta], color='orange', marker="*", label='Default')
 
             # Labels and legend
             title_size = 12
@@ -111,7 +115,10 @@ if __name__ == "__main__" :
             ax.set_ylim(0.01,1)
             # ax.set_yscale('log')
             ax.grid(alpha=0.3)
+            ax.legend(loc='upper left', fontsize=title_size)
 
+        old_eff = [0.346081335847024, 0.7720048899755502, 0.729607250755287]
+        old_fake = [0.11819015905401677, 0.11074505828687278, 0.2697841726618705]
         for i_pt, pt_bin in enumerate(pt_bins):
 
             ax = axs[1][i_pt]
@@ -120,9 +127,13 @@ if __name__ == "__main__" :
             fake_rates = df[f"{metric_2}_Pt{pt_bin}"] # FakeDuplicateRate
 
             # Scatter plot of all points
-            scatter = ax.scatter(efficiencies, fake_rates, color='blue', alpha=0.5)
+            scatter = ax.scatter(efficiencies, fake_rates, color='blue', alpha=0.5, label='Pareto Front')
             scatter_objects.append(scatter)
             axs_objects.append(ax)
+
+            # Add default point
+            if plot_ref:
+                ax.scatter(old_eff[i_pt], old_fake[i_pt], color='orange', marker="*", label='Default')
 
             # Labels and legend
             title_size = 12
@@ -137,6 +148,7 @@ if __name__ == "__main__" :
             ax.set_ylim(0.01,1)
             # ax.set_yscale('log')
             ax.grid(alpha=0.3)
+            ax.legend(loc='upper left', fontsize=title_size)
         # Hide unused subplots (if eta_bins and pt_bins are of different lengths)
         for i in range(len(pt_bins), n_cols):
             fig.delaxes(axs[1][i])
@@ -158,9 +170,19 @@ if __name__ == "__main__" :
         fake_rates = df[f"{metric_2}"] # FakeDuplicateRate
 
         # Scatter plot of all points
-        scatter = ax.scatter(efficiencies, fake_rates, color='blue', alpha=0.5)
+        scatter = ax.scatter(efficiencies, fake_rates, color='blue', alpha=0.5, label='Pareto Front')
         scatter_objects.append(scatter)
         axs_objects.append(ax)
+
+        # Add default point
+        old_eff = 0.7307026652821045; old_fake = 0.11862810620329303
+        if plot_ref:
+            ax.scatter(old_eff, old_fake, color='orange', marker="*", label='Default')
+
+        # Add SingleMuon point
+        singlemu_eff = 0.7663551401869159; singlemu_fake = 0.1926975292160447
+        if plot_ref:
+            ax.scatter(singlemu_eff, singlemu_fake, color='green', marker="*", label='Single Muon')
 
         # Labels and legend
         title_size = 12
@@ -172,6 +194,7 @@ if __name__ == "__main__" :
         ax.set_ylim(0.001,1)
         # ax.set_yscale('log')
         ax.grid(alpha=0.3)
+        ax.legend(loc='upper left', fontsize=title_size)
 
         plt.tight_layout()
 
@@ -327,6 +350,29 @@ if __name__ == "__main__" :
             print(f" ### INFO: Saving {path}/Plots/ParetoFront_AllMetrics_Point{point}.png")
             plt.savefig(f"{path}/Plots/ParetoFront_AllMetrics_Point{point}.png")
             plt.savefig(f"{path}/Plots/ParetoFront_AllMetrics_Point{point}.pdf")
+
+            # Check if there are overlapping points and print them
+            print("\n ### Cut parameters: ", vars)
+            if len(eta_bins) > 0 or len(pt_bins) > 0:
+                for i_eta, eta_bin in enumerate(eta_bins):
+                    print(f"\n ### INFO: Searching overlapping points with {point} in {eta_bin}")
+                    overlap_idx = df[(df[f"{metric_1}_{eta_bin}"] == df.iloc[nearest_idx][f"{metric_1}_{eta_bin}"]) & (df[f"{metric_2}_{eta_bin}"] == df.iloc[nearest_idx][f"{metric_2}_{eta_bin}"])].index.values
+                    for idx in overlap_idx:
+                        print(" >>> ", idx, "   : ", [df.iloc[idx][var] for var in vars])
+
+                for i_pt, pt_bin in enumerate(pt_bins):
+                    print(f"\n ### INFO: Searching overlapping points with {point} in {pt_bin}")
+                    overlap_idx = df[(df[f"{metric_1}_Pt{pt_bin}"] == df.iloc[nearest_idx][f"{metric_1}_Pt{pt_bin}"]) & (df[f"{metric_2}_Pt{pt_bin}"] == df.iloc[nearest_idx][f"{metric_2}_Pt{pt_bin}"])].index.values
+                    for idx in overlap_idx:
+                        print(" >>> ", idx, "   : ", [df.iloc[idx][var] for var in vars])                
+
+            else:
+                print(f"\n ### INFO: Searching overlapping points with {point}")
+                overlap_idx = df[(df[f"{metric_1}"] == df.iloc[nearest_idx][f"{metric_1}"]) & (df[f"{metric_2}"] == df.iloc[nearest_idx][f"{metric_2}"])].index.values
+                for idx in overlap_idx:
+                    print(" >>> ", idx, "   : ", [df.iloc[idx][var] for var in vars])
+
+            print("\n")
 
     ###########################################################
     # Start interactive window

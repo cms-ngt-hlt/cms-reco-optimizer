@@ -37,7 +37,7 @@ def get_metrics(uproot_file, id):
         print(f" ### WARNING: Metrics not found for agent {id}")
         return [1.0] * 2
     
-    return [1 - total_ass_sim / total_sim, (total_rec - total_ass + total_dup) / total_rec]
+    return [1 - total_ass_sim / total_sim, (total_rec - total_ass) / total_rec]
 
 # return string for the metric name used for the csv header
 def get_metrics_names():
@@ -74,7 +74,7 @@ def get_binned_metrics(uproot_file, id):
                 metrics_eta += [1.0] * 2
                 print(f" ### WARNING: Metrics not found for agent {id} in eta bin {ib}")
             else:
-                metrics_eta += [(1 - (i_ast/i_s)), ((i_r - i_as + i_d) / i_r)]
+                metrics_eta += [(1 - (i_ast/i_s)), ((i_r - i_as) / i_r)]
 
     # metrics vs pt
     metrics_pt = []
@@ -87,7 +87,7 @@ def get_binned_metrics(uproot_file, id):
                 metrics_pt += [1.0] * 2
                 print(f" ### WARNING: Metrics not found for agent {id} in pt bin {ib}")
             else:
-                metrics_pt += [(1 - (i_ast/i_s)), ((i_r - i_as + i_d) / i_r)]
+                metrics_pt += [(1 - (i_ast/i_s)), ((i_r - i_as) / i_r)]
 
     # print(" ### INFO DEBUG: ", type(metrics_eta + metrics_pt), metrics_eta + metrics_pt)
     return metrics_eta + metrics_pt
@@ -224,7 +224,7 @@ def add_validation(process,inputs,target):
                 ptMinTP = cms.double(0.85),
                 signalOnlyTP = cms.bool(True),
                 stableOnlyTP = cms.bool(False),
-                tipTP = cms.double(3.5),
+                tipTP = cms.double(2),
                 trackLabels = cms.VInputTag(target + str(i)),
                 trackAssociator = cms.untracked.InputTag(hitassoc),
                 trackingParticles = cms.InputTag('mix', 'MergedTrackTruth')               
@@ -264,16 +264,16 @@ def add_validation_binned(process,inputs,target):
                 invertRapidityCutTP = cms.bool(False),
                 lipTP = cms.double(30.0),
                 maxPhiTP = cms.double(3.2),
-                maxRapidityTP = cms.double(4),
+                maxRapidityTP = cms.double(4.5),
                 minHitTP = cms.int32(0),
                 minPhiTP = cms.double(-3.2),
-                minRapidityTP = cms.double(-4),
+                minRapidityTP = cms.double(-4.5),
                 pdgIdTP = cms.vint32(),
                 ptMaxTP = cms.double(1e+100),
-                ptMinTP = cms.double(0.85),
+                ptMinTP = cms.double(0.9),
                 signalOnlyTP = cms.bool(True),
                 stableOnlyTP = cms.bool(False),
-                tipTP = cms.double(3.5),
+                tipTP = cms.double(2),
                 trackLabels = cms.VInputTag(target + str(i)),
                 trackAssociator = cms.untracked.InputTag(hitassoc),
                 trackingParticles = cms.InputTag('mix', 'MergedTrackTruth')               
@@ -290,16 +290,16 @@ def add_validation_binned(process,inputs,target):
                 invertRapidityCutTP = cms.bool(False),
                 lipTP = cms.double(30.0),
                 maxPhiTP = cms.double(3.2),
-                maxRapidityTP = cms.double(4),
+                maxRapidityTP = cms.double(4.5),
                 minHitTP = cms.int32(0),
                 minPhiTP = cms.double(-3.2),
-                minRapidityTP = cms.double(-4),
+                minRapidityTP = cms.double(-4.5),
                 pdgIdTP = cms.vint32(),
                 ptMaxTP = cms.double(1e+100),
-                ptMinTP = cms.double(0.85),
+                ptMinTP = cms.double(0.4),
                 signalOnlyTP = cms.bool(True),
                 stableOnlyTP = cms.bool(False),
-                tipTP = cms.double(3.5),
+                tipTP = cms.double(2),
                 trackLabels = cms.VInputTag(target + str(i)),
                 trackAssociator = cms.untracked.InputTag(hitassoc),
                 trackingParticles = cms.InputTag('mix', 'MergedTrackTruth')               
