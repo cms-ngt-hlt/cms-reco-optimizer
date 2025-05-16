@@ -322,25 +322,14 @@ if __name__ == "__main__":
     print("> > Number of agents    :",args.num_particles)
     print("> > Number of iterations:",args.num_iterations)
 
-    SingleMuConfig = {
-        'cellMinYSizeB1': 10,
-        'cellMinYSizeB2': 10,
-        'cellZ0Cut': 15,
-        'cellMaxDYSize12': 12,
-        'cellMaxDYSize': 10,
-        'cellMaxDYPred': 26,
-        'cellPtCut': 0.85,
-    }
-    initial_values = [SingleMuConfig[key] for key in param_names]
-
     print(" ### DEBUG: param_names = ", param_names)
     print(" ### DEBUG: lower_bounds = ", lb)
     print(" ### DEBUG: upper_bounds = ", ub)
-    print(" ### DEBUG: initial_values = ", initial_values)
 
-    pso = MOPSO(objective=objective, lower_bounds=lb, upper_bounds=ub, 
-                num_particles=args.num_particles, default_point=np.array(initial_values, dtype=object),
-                param_names=param_names, metric_names=get_general_metrics_names())
+    pso = MOPSO(objective=objective, 
+                lower_bounds=lb,
+                upper_bounds=ub, 
+                num_particles=args.num_particles)
     
     pso.optimize(num_iterations=args.num_iterations)
     

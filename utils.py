@@ -4,6 +4,7 @@ import sys
 import os
 import warnings
 from itertools import cycle
+import json
 
 spinner = cycle('-/|\\')
 
@@ -45,7 +46,6 @@ def get_metrics_names():
 
 # calculate the metrics from validation results in pt and eta bins
 def get_binned_metrics(uproot_file, id):
-    # pdb.set_trace()
     h_dir_eta = uproot_file['SimpleTrackValidationEtaBins' + str(id)]
     h_dir_pt = uproot_file['SimpleTrackValidationPtBins' + str(id)]
     # histograms vs eta
@@ -156,18 +156,15 @@ def is_v_input(typ):
     return _ValidatingParameterListBase in getmro(typ)
 
 def chain_update(process,inputs,tune,modules):
-
     taskList = []
     for i,_ in enumerate(inputs):
-        
         replace = {}
         # define replacers for all
         for f in modules + tune:
             replace[f] = MassSearchReplaceAnyInputTagVisitor(f, f+str(i), verbose=False) # True to see all the renamings
-            # create new ith module
-            if f not in tune: #we have already taken care of the modules to tune
+            # create new ith module only if it doesn't already exist
+            if f not in tune and not hasattr(process, f + str(i)):
                 setattr(process, f + str(i), getattr(process,f).clone()) 
-
         #apply replacement for all the ith modules, with all the (other) ith modules
         for m in modules:
             module = getattr(process,m + str(i))
@@ -175,13 +172,10 @@ def chain_update(process,inputs,tune,modules):
                 if f != m: # not realy needed
                     replace[f].doIt(module, m + str(i))
             taskList.append(module)
-
         for t in tune:
             taskList.append(getattr(process,t + str(i)))
-            
     process.mainTask = cms.Task(*taskList)
     process.mainPath = cms.Path(process.mainTask)
-
     process.schedule.extend([process.mainPath])
     return process
 
@@ -203,10 +197,96 @@ def add_validation(process,inputs,target):
         if getattr(f,"label_tr").value() == target:
             hitassoc = getattr(f,"associator").value()
             break
+
     
     taskList = []
     for i,_ in enumerate(inputs):
-        
+        highPurity = "hltIter0Phase2L3FromL1TkMuonTrackSelectionHighPurity" + str(i)
+        classifier = "hltIter0Phase2L3FromL1TkMuonTrackCutClassifier" + str(i)
+        setattr(process, highPurity, cms.EDProducer("TrackCollectionFilterCloner",
+                copyExtras = cms.untracked.bool(True),
+                copyTrajectories = cms.untracked.bool(False),
+                minQuality = cms.string('highPurity'),
+                originalMVAVals = cms.InputTag(classifier, "MVAValues"),
+                originalQualVals = cms.InputTag(classifier, "QualityMasks"),
+                originalSource = cms.InputTag("hltL3MuonTracksSelectionFromL1TkMu")
+            )
+        )
+        taskList.append(getattr(process, highPurity))
+
+        assoc = "Phase2tpToL3IOiter0TkHighPurityAssociation" + str(i) 
+        setattr(process, assoc, cms.EDProducer("MuonAssociatorEDProducer",
+                AbsoluteNumberOfHits_muon = cms.bool(False),
+                AbsoluteNumberOfHits_track = cms.bool(False),
+                CSClinksTag = cms.InputTag("simMuonCSCDigis","MuonCSCStripDigiSimLinks"),
+                CSCsimHitsTag = cms.InputTag("g4SimHits","MuonCSCHits"),
+                CSCsimHitsXFTag = cms.InputTag("mix","g4SimHitsMuonCSCHits"),
+                CSCwireLinksTag = cms.InputTag("simMuonCSCDigis","MuonCSCWireDigiSimLinks"),
+                DTdigiTag = cms.InputTag("simMuonDTDigis"),
+                DTdigisimlinkTag = cms.InputTag("simMuonDTDigis"),
+                DTrechitTag = cms.InputTag("hltDt1DRecHits"),
+                DTsimhitsTag = cms.InputTag("g4SimHits","MuonDTHits"),
+                DTsimhitsXFTag = cms.InputTag("mix","g4SimHitsMuonDTHits"),
+                EfficiencyCut_muon = cms.double(0.0),
+                EfficiencyCut_track = cms.double(0.0),
+                GEMdigisimlinkTag = cms.InputTag("simMuonGEMDigis","GEM"),
+                GEMsimhitsTag = cms.InputTag("g4SimHits","MuonGEMHits"),
+                GEMsimhitsXFTag = cms.InputTag("mix","g4SimHitsMuonGEMHits"),
+                NHitCut_muon = cms.uint32(0),
+                NHitCut_track = cms.uint32(0),
+                PurityCut_muon = cms.double(0.75),
+                PurityCut_track = cms.double(0.75),
+                ROUList = cms.vstring(
+                    'TrackerHitsTIBLowTof',
+                    'TrackerHitsTIBHighTof',
+                    'TrackerHitsTIDLowTof',
+                    'TrackerHitsTIDHighTof',
+                    'TrackerHitsTOBLowTof',
+                    'TrackerHitsTOBHighTof',
+                    'TrackerHitsTECLowTof',
+                    'TrackerHitsTECHighTof',
+                    'TrackerHitsPixelBarrelLowTof',
+                    'TrackerHitsPixelBarrelHighTof',
+                    'TrackerHitsPixelEndcapLowTof',
+                    'TrackerHitsPixelEndcapHighTof'
+                ),
+                RPCdigisimlinkTag = cms.InputTag("simMuonRPCDigis","RPCDigiSimLink"),
+                RPCsimhitsTag = cms.InputTag("g4SimHits","MuonRPCHits"),
+                RPCsimhitsXFTag = cms.InputTag("mix","g4SimHitsMuonRPCHits"),
+                ThreeHitTracksAreSpecial = cms.bool(False),
+                UseGrouped = cms.bool(True),
+                UseMuon = cms.bool(False),
+                UsePixels = cms.bool(True),
+                UseSplitting = cms.bool(True),
+                UseTracker = cms.bool(True),
+                acceptOneStubMatchings = cms.bool(False),
+                associatePixel = cms.bool(True),
+                associateRecoTracks = cms.bool(True),
+                associateStrip = cms.bool(True),
+                associatorByWire = cms.bool(False),
+                crossingframe = cms.bool(False),
+                dumpDT = cms.bool(False),
+                dumpInputCollections = cms.untracked.bool(False),
+                ignoreMissingTrackCollection = cms.untracked.bool(True),
+                includeZeroHitMuons = cms.bool(True),
+                inputCSCSegmentCollection = cms.InputTag("cscSegments"),
+                inputDTRecSegment4DCollection = cms.InputTag("dt4DSegments"),
+                links_exist = cms.bool(True),
+                phase2TrackerSimLinkSrc = cms.InputTag("simSiPixelDigis","Tracker"),
+                pixelSimLinkSrc = cms.InputTag("simSiPixelDigis","Pixel"),
+                rejectBadGlobal = cms.bool(True),
+                simtracksTag = cms.InputTag("g4SimHits"),
+                simtracksXFTag = cms.InputTag("mix","g4SimHits"),
+                stripSimLinkSrc = cms.InputTag("simSiStripDigis"),
+                tpRefVector = cms.bool(True),
+                tpTag = cms.InputTag("TPmu"),
+                tracksTag = cms.InputTag(target + str(i)),
+                useGEMs = cms.bool(True),
+                usePhase2Tracker = cms.bool(True)
+            )           
+        )
+        taskList.append(getattr(process, assoc))
+
         # All these params may be copied from the MTV defined in the process
         name = 'SimpleTrackValidation' + str(i)
         setattr(process, name, cms.EDAnalyzer('SimpleTrackValidation',
@@ -215,18 +295,18 @@ def add_validation(process,inputs,target):
                 invertRapidityCutTP = cms.bool(False),
                 lipTP = cms.double(30.0),
                 maxPhiTP = cms.double(3.2),
-                maxRapidityTP = cms.double(2.5),
+                maxRapidityTP = cms.double(2.4),
                 minHitTP = cms.int32(0),
                 minPhiTP = cms.double(-3.2),
-                minRapidityTP = cms.double(-2.5),
-                pdgIdTP = cms.vint32(),
+                minRapidityTP = cms.double(-2.4),
+                pdgIdTP = cms.vint32(13,-13),
                 ptMaxTP = cms.double(1e+100),
                 ptMinTP = cms.double(0.85),
                 signalOnlyTP = cms.bool(True),
                 stableOnlyTP = cms.bool(False),
                 tipTP = cms.double(2),
                 trackLabels = cms.VInputTag(target + str(i)),
-                trackAssociator = cms.untracked.InputTag(hitassoc),
+                associatormap = cms.InputTag('Phase2tpToL3IOiter0TkHighPurityAssociation' + str(i)),
                 trackingParticles = cms.InputTag('mix', 'MergedTrackTruth')               
             )
         )
@@ -235,6 +315,8 @@ def add_validation(process,inputs,target):
 
     process.simpleValidationSeq = cms.Sequence(sum(taskList[1:],taskList[0]))
     process.simpleValidationPath = cms.EndPath(process.simpleValidationSeq)
+    process.TPMuPath = cms.EndPath(process.TPmu_seq)
+    process.schedule.extend([process.TPMuPath])
     process.schedule.extend([process.simpleValidationPath])
 
     return process
@@ -315,33 +397,78 @@ def add_validation_binned(process,inputs,target):
 
     return process
     
-def modules_tuning(process,inputs,params,tune):
-    
+# Helper to recursively get/set parameter by path (e.g., 'filterPSet.maxChi2.value')
+def get_nested_param(obj, path):
+    parts = path.split('.')
+    for p in parts:
+        if hasattr(obj, p):
+            obj = getattr(obj, p)
+        elif isinstance(obj, dict) and p in obj:
+            obj = obj[p]
+        else:
+            return None
+    return obj
+
+def set_nested_param(obj, path, value):
+    parts = path.split('.')
+    for p in parts[:-1]:
+        if hasattr(obj, p):
+            obj = getattr(obj, p)
+        elif isinstance(obj, dict) and p in obj:
+            obj = obj[p]
+        else:
+            return False
+    last = parts[-1]
+    if hasattr(obj, last):
+        setattr(obj, last, value)
+        return True
+    elif isinstance(obj, dict) and last in obj:
+        obj[last] = value
+        return True
+    return False
+
+def modules_tuning(process,inputs,params,tune,value_types=None):
+    # value_types: dict mapping param name to 'int' or 'double' (from config)
     for i, row in enumerate(inputs):
         modules_to_tune = [getattr(process,t).clone() for t in tune]
+        col = 0
         for n, p in enumerate(params):
             for m in modules_to_tune:
-                this_params = m.parameters_()
-                if p in this_params:
-                    par = this_params[p]
-                    # check if it's a vector of doubles 
-                    if is_v_input(type(par)): 
-                        # change the list of values
-                        l = len(par.value())
-                        setattr(m,p,[int(row[n+i]) for i in range(l)]) 
+                par = get_nested_param(m, p)
+                if par is not None:
+                    vtype = value_types[p] if value_types and p in value_types else None
+                    # Handle vector vs scalar
+                    if is_v_input(type(par)):
+                        # Assign each element from consecutive columns
+                        length = len(par)
+                        vals = row[col:col+length]
+                        if vtype == "int":
+                            for idx in range(length):
+                                par[idx] = int(vals[idx])
+                        else:
+                            for idx in range(length):
+                                par[idx] = float(vals[idx])
+                        col += length
                     else:
-                         # change the value
-                        setattr(m,p,row[n]) 
-        for n,m in zip(tune,modules_to_tune): 
-            # append index to the name of module to tune
-            setattr(process,n+str(i),m) 
-        
+                        val = row[col]
+                        if vtype == "int":
+                            set_nested_param(m, p, int(val))
+                        else:
+                            set_nested_param(m, p, float(val))
+                        col += 1
+        for n,m in zip(tune,modules_to_tune):
+            setattr(process,n+str(i),m)
     return process
    
 def expand_process(process,inputs,params,tune,chain,target):
-    
+
     process = remove_outputs(process) #check for all EndPaths 
-    process = modules_tuning(process,inputs,params,tune)
+    
+    with open("bounds.json") as bounds_file:
+        bounds = json.load(bounds_file)
+    value_types = extract_value_types(bounds)
+        
+    process = modules_tuning(process,inputs,params,tune,value_types)
     process = add_validation(process,inputs,target)
     process = chain_update(process,inputs,tune,chain+[target])
     
@@ -355,3 +482,27 @@ def expand_process_binned(process,inputs,params,tune,chain,target):
     process = chain_update(process,inputs,tune,chain+[target])
     
     return process
+
+# Recursively extract all parameter paths from a module or PSet
+# Returns a list of dot-separated parameter paths (including nested ones)
+def extract_param_paths(obj, prefix=""):
+    paths = []
+    # Try to get parameters_() if available (for modules/PSets)
+    if hasattr(obj, 'parameters_'):
+        params = obj.parameters_()
+    elif isinstance(obj, dict):
+        params = obj
+    else:
+        return paths
+    for k, v in params.items():
+        path = f"{prefix}.{k}" if prefix else k
+        # If v is a PSet or similar, recurse
+        if hasattr(v, 'parameters_') or isinstance(v, dict):
+            paths.extend(extract_param_paths(v, path))
+        else:
+            paths.append(path)
+    return paths
+
+def extract_value_types(config_dict):
+    """Extracts a dict mapping parameter name to value_type from the config dict."""
+    return {k: v.get("value_type", "double") for k, v in config_dict.items()}
