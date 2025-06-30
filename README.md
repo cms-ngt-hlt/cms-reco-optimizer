@@ -256,3 +256,8 @@ cmsDriver.py step2 -s DIGI:pdigi_valid,L1TrackTrigger,L1,L1P2GT,DIGI2RAW,HLT:75e
 
 cmsDriver.py step5 -s HARVESTING:@trackingOnlyValidation+@HLTMon+postProcessorHLTtrackingSequence --conditions auto:phase2_realistic_T33 --mc --geometry ExtendedRun4D110 --scenario pp --filetype DQM --era Phase2C17I13M9 -n 10 --filein file:step2_DIGI_L1TrackTrigger_L1_L1P2GT_DIGI2RAW_HLT_VALIDATION_inDQM.root 
 -->
+
+Command to run the optimizer on ZMM 200PU events
+```bash
+./optimize_reco.py step2_L1P2GT_HLT_VALIDATION.py -t hltIter0Phase2L3FromL1TkMuonTrackCutClassifier -v hltIter0Phase2L3FromL1TkMuonTrackSelectionHighPurity -f /eos/cms/store/relval/CMSSW_15_1_0_pre2/RelValZMM_14/GEN-SIM-DIGI-RAW/PU_150X_mcRun4_realistic_v1_STD_Run4D110_PU-v1/2580000/ --num_threads 50 -a 200 -i 10 -b config.json  --num_events 10000 -o large_sample
+```

@@ -149,10 +149,46 @@ def get_bounds(par_file):
             ub = ub + [float(ub_)] if not hasattr(ub_, "__len__") else ub + [float(j) for j in ub_]
     return lb, ub
 
+def get_input_files(input_arg):
+    # Accepts a list or a string
+    # If input_arg is a list of length 1, treat as a single input
+    if isinstance(input_arg, list):
+        if len(input_arg) == 1:
+            input_arg = input_arg[0]
+        elif len(input_arg) > 1:
+            # List of files
+            result = []
+            for f in input_arg:
+                if f.startswith("file:"):
+                    fpath = f[5:]
+                    result.append("file:" + os.path.abspath(fpath))
+                else:
+                    result.append("file:" + os.path.abspath(f))
+            return result
+        else:
+            return []
+    # Now input_arg is a string
+    # Remove file: prefix if present
+    if input_arg.startswith("file:"):
+        path = input_arg[5:]
+    else:
+        path = input_arg
+    if os.path.isdir(path):
+        # Directory: collect all files in directory, sorted
+        files = sorted([
+            os.path.join(path, fname)
+            for fname in os.listdir(path)
+            if os.path.isfile(os.path.join(path, fname))
+        ])
+        return ["file:" + os.path.abspath(f) for f in files]
+    else:
+        # Single file
+        return ["file:" + os.path.abspath(path)]
+
 if __name__ == "__main__":
     
     print_logo()
-    input_files = [ "file:" + os.path.abspath(f[5:]) if f.startswith("file:") else f for f in args.input_file ]
+    input_files = get_input_files(args.input_file)
     start_dir = os.getcwd()
     config_to_run = 'process_to_run.py'
     config_to_graph = 'process_zero.py'
@@ -332,5 +368,5 @@ if __name__ == "__main__":
                 num_particles=args.num_particles)
     
     pso.optimize(num_iterations=args.num_iterations)
-    
+
 
