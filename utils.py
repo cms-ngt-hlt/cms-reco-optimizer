@@ -1,6 +1,7 @@
 import numpy as np
 from inspect import getmro
 import sys
+import json
 import os
 import warnings
 from itertools import cycle
@@ -226,7 +227,7 @@ def add_validation(process,inputs,target):
                 stableOnlyTP = cms.bool(False),
                 tipTP = cms.double(2),
                 trackLabels = cms.VInputTag(target + str(i)),
-                trackAssociator = cms.untracked.InputTag(hitassoc),
+                trackAssociator = cms.InputTag(hitassoc),
                 trackingParticles = cms.InputTag('mix', 'MergedTrackTruth')               
             )
         )
@@ -275,7 +276,7 @@ def add_validation_binned(process,inputs,target):
                 stableOnlyTP = cms.bool(False),
                 tipTP = cms.double(2),
                 trackLabels = cms.VInputTag(target + str(i)),
-                trackAssociator = cms.untracked.InputTag(hitassoc),
+                trackAssociator = cms.InputTag(hitassoc),
                 trackingParticles = cms.InputTag('mix', 'MergedTrackTruth')               
             )
         )
@@ -301,7 +302,7 @@ def add_validation_binned(process,inputs,target):
                 stableOnlyTP = cms.bool(False),
                 tipTP = cms.double(2),
                 trackLabels = cms.VInputTag(target + str(i)),
-                trackAssociator = cms.untracked.InputTag(hitassoc),
+                trackAssociator = cms.InputTag(hitassoc),
                 trackingParticles = cms.InputTag('mix', 'MergedTrackTruth')               
             )
         )
@@ -315,33 +316,78 @@ def add_validation_binned(process,inputs,target):
 
     return process
     
-def modules_tuning(process,inputs,params,tune):
-    
+# Helper to recursively get/set parameter by path (e.g., 'filterPSet.maxChi2.value')
+def get_nested_param(obj, path):
+    parts = path.split('.')
+    for p in parts:
+        if hasattr(obj, p):
+            obj = getattr(obj, p)
+        elif isinstance(obj, dict) and p in obj:
+            obj = obj[p]
+        else:
+            return None
+    return obj
+
+def set_nested_param(obj, path, value):
+    parts = path.split('.')
+    for p in parts[:-1]:
+        if hasattr(obj, p):
+            obj = getattr(obj, p)
+        elif isinstance(obj, dict) and p in obj:
+            obj = obj[p]
+        else:
+            return False
+    last = parts[-1]
+    if hasattr(obj, last):
+        setattr(obj, last, value)
+        return True
+    elif isinstance(obj, dict) and last in obj:
+        obj[last] = value
+        return True
+    return False
+
+def modules_tuning(process,inputs,params,tune,value_types=None):
+    # value_types: dict mapping param name to 'int' or 'double' (from config)
     for i, row in enumerate(inputs):
         modules_to_tune = [getattr(process,t).clone() for t in tune]
+        col = 0
         for n, p in enumerate(params):
             for m in modules_to_tune:
-                this_params = m.parameters_()
-                if p in this_params:
-                    par = this_params[p]
-                    # check if it's a vector of doubles 
-                    if is_v_input(type(par)): 
-                        # change the list of values
-                        l = len(par.value())
-                        setattr(m,p,[int(row[n+i]) for i in range(l)]) 
+                par = get_nested_param(m, p)
+                if par is not None:
+                    vtype = value_types[p] if value_types and p in value_types else None
+                    # Handle vector vs scalar
+                    if is_v_input(type(par)):
+                        # Assign each element from consecutive columns
+                        length = len(par)
+                        vals = row[col:col+length]
+                        if vtype == "int":
+                            for idx in range(length):
+                                par[idx] = int(vals[idx])
+                        else:
+                            for idx in range(length):
+                                par[idx] = float(vals[idx])
+                        col += length
                     else:
-                         # change the value
-                        setattr(m,p,row[n]) 
-        for n,m in zip(tune,modules_to_tune): 
-            # append index to the name of module to tune
-            setattr(process,n+str(i),m) 
-        
+                        val = row[col]
+                        if vtype == "int":
+                            set_nested_param(m, p, int(val))
+                        else:
+                            set_nested_param(m, p, float(val))
+                        col += 1
+        for n,m in zip(tune,modules_to_tune):
+            setattr(process,n+str(i),m)
     return process
    
 def expand_process(process,inputs,params,tune,chain,target):
-    
+
     process = remove_outputs(process) #check for all EndPaths 
-    process = modules_tuning(process,inputs,params,tune)
+    
+    with open("bounds.json") as bounds_file:
+        bounds = json.load(bounds_file)
+    value_types = extract_value_types(bounds)
+        
+    process = modules_tuning(process,inputs,params,tune,value_types)
     process = add_validation(process,inputs,target)
     process = chain_update(process,inputs,tune,chain+[target])
     
@@ -350,8 +396,38 @@ def expand_process(process,inputs,params,tune,chain,target):
 def expand_process_binned(process,inputs,params,tune,chain,target):
     
     process = remove_outputs(process) #check for all EndPaths 
-    process = modules_tuning(process,inputs,params,tune)
+
+    with open("bounds.json") as bounds_file:
+        bounds = json.load(bounds_file)
+    value_types = extract_value_types(bounds)
+        
+    process = modules_tuning(process,inputs,params,tune,value_types)
     process = add_validation_binned(process,inputs,target)
     process = chain_update(process,inputs,tune,chain+[target])
     
     return process
+
+
+# Recursively extract all parameter paths from a module or PSet
+# Returns a list of dot-separated parameter paths (including nested ones)
+def extract_param_paths(obj, prefix=""):
+    paths = []
+    # Try to get parameters_() if available (for modules/PSets)
+    if hasattr(obj, 'parameters_'):
+        params = obj.parameters_()
+    elif isinstance(obj, dict):
+        params = obj
+    else:
+        return paths
+    for k, v in params.items():
+        path = f"{prefix}.{k}" if prefix else k
+        # If v is a PSet or similar, recurse
+        if hasattr(v, 'parameters_') or isinstance(v, dict):
+            paths.extend(extract_param_paths(v, path))
+        else:
+            paths.append(path)
+    return paths
+
+def extract_value_types(config_dict):
+    """Extracts a dict mapping parameter name to value_type from the config dict."""
+    return {k: v.get("value_type", "double") for k, v in config_dict.items()}

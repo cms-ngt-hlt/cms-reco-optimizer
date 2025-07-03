@@ -1,7 +1,6 @@
-# NGT instructions for optimization of Pixel Tracks
+# NGT instructions for optimization of Pixel Tracks with CA Extension
 
 This repository: [https://github.com/cms-ngt-hlt/cms-reco-optimizer](https://github.com/cms-ngt-hlt/cms-reco-optimizer)
-Currently using a development branch `PixelPatatrackDev`.
 
 Optimizer repository: [https://github.com/cms-patatrack/The-Optimizer](https://github.com/cms-patatrack/The-Optimizer)
 Currently using a fork (it contains a transparent but necessary option to include the header in pareto front, used for data visualization and plotting).
@@ -14,29 +13,21 @@ This repo has a new `optimize_reco.py` script, modelled on top of `optimize.py` 
 
 ### Installation
 
-We are currently using the `CMSSW_15_0_0_pre3` release, in a branch with SimDoublets developments:
+We are currently using the `CMSSW_15_1_0_pre3` release:
 ```bash
-cmsrel CMSSW_15_0_0_pre3
-cd CMSSW_15_0_0_pre3/src
+cmsrel CMSSW_15_1_0_pre3
+cd CMSSW_15_1_0_pre3/src
 cmsenv
 git cms-init
-```
-
-[Optional] Add SimDoublets:
-```bash
-git cms-rebase-topic JanGerritSchulz:jgs_ph2_pixelTracking_addSimDoublets
-```
-
-Add the exposed parameters and the validation scripts (**NEW** version binned in eta and pt):
-```bash
-git cms-rebase-topic cms-ngt-hlt:ev_TheOptimizer
+git cms-rebase-topic cms-ngt-hlt:IDRIS-CAEXT-TrackingPOG-25-06-30
+git cms-rebase-topic cms-ngt-hlt:SimpleValidationBinned
 ```
 
 Install the container for The Optimizer:
 ```bash
 git clone git@github.com:cms-ngt-hlt/cms-reco-optimizer.git
 cd cms-reco-optimizer
-git checkout PixelPatatrackDev
+git checkout CAExtOptimization
 ```
 
 If you are working on the P5 machines, you will need a specific branch of The Optimizer to deactivate Numba, which is in Luca's fork:
@@ -53,7 +44,7 @@ scram b -j 12
 ```
 </details>
 
-### Input files
+### [OPTIONAL] Input files
 
 - Single Muon samples
 
@@ -67,12 +58,6 @@ Configuration from the default workflow for "SingleMuPt15Eta1p7_2p7":
 runTheMatrix.py -w upgrade -l 29689.402 -j 0
 ```
 
-Run the first two steps:
-```bash
-cmsRun SingleMuPt15Eta0_0p4_cfi_GEN_SIM.py
-cmsRun step2_DIGI_L1TrackTrigger_L1_L1P2GT_DIGI2RAW_HLT.py
-```
-
 - TTbar samples
 
 Configuration from the default workflow for "TTbar" without pile-up:
@@ -80,17 +65,12 @@ Configuration from the default workflow for "TTbar" without pile-up:
 runTheMatrix.py -w upgrade -l 29634.402 -j 0
 ```
 
-Run the first two steps:
-```bash
-cmsRun -n 0 TTbar_14TeV_TuneCP5_cfi_GEN_SIM.py
-cmsRun -n 0 step2_DIGI_L1TrackTrigger_L1_L1P2GT_DIGI2RAW_HLT_PU.py
-```
-
 ### [OPTIONAL] Plot of the SimDoublets before optimizing
 
 To plot the doublets before optimizing the cuts, use the SimDoublets analyzer in `src/Validation/TrackingMCTruth/test`".
 Change the input file location and run:
 ```bash
+git cms-addpkg Validation/TrackingMCTruth
 cmsRun simDoubletsPhase2_TEST.py
 cmsRun simDoubletsPhase2_HARVESTING.py
 ```
@@ -126,8 +106,6 @@ makeGeneralPlots DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root -d Sakura 
 
 # Run The-Optimizer
 
-The **NEW** version of the optimization makes use of metrics binned in eta and pt.
-
 This interface runs the optimizer on top of CMSSW taking a list of parameters to tune, the module they belong to, and a target used to validate against.
 `optimize_reco.py` automatically produces a `cmsRun` configuration derived from a provided input configuration (i.e. a `step2.py` or `step.py`).
 Let's use as an example the files found in the [examples](./examples) folder which contains the python config file for CMSSW as well as the list of parameters to tune (in a `.csv` file) and the list of lower and upper bounds for those parameters (in a `.json`) file. **Make sure to copy or move the configuration file for CMSSW in the same directory as optimize_reco.py before using it**.
@@ -135,11 +113,11 @@ Let's use as an example the files found in the [examples](./examples) folder whi
 [`hlt_pixel_optimization.py`](./examples/hlt_pixel_optimization.py), generated with:
 ```bash
 cmsDriver.py step2 \
--s L1P2GT,HLT:@relvalRun4,VALIDATION \
+-s L1P2GT,HLT:@relvalRun4,VALIDATION:@hltValidation \
 --processName HLTX \
 --conditions auto:phase2_realistic_T33 \
---datatier GEN-SIM-RECO,MINIAODSIM,NANOAODSIM,DQMIO \
---eventcontent RECOSIM,MINIAODSIM,NANOEDMAODSIM,DQM \
+--datatier GEN-SIM-RECO,DQMIO \
+--eventcontent RECOSIM,DQM \
 --geometry ExtendedRun4D110 \
 --era Phase2C17I13M9 \
 --procModifiers alpaka \
@@ -151,7 +129,7 @@ cmsDriver.py step2 \
 ```
 is a regular CMSSW configuration that runs the HLT reconstruction and validation.
 
-[`config.json`](./examples/config.json) contains the dictionary of all parameters to be tuned including their lower and upper bounds, as well as their type (in case of vectors, the type of their elements) 
+[`CAExt_config.json`](./examples/CAExt_config.json) contains the dictionary of all parameters to be tuned including their lower and upper bounds, as well as their type (in case of vectors, the type of their elements) 
 
 Having these 2 files, The Optimizer can be run. First, source The Optimizer path from within the `cms-reco-optimizer` folder:
 
@@ -166,12 +144,12 @@ Then, start the optimization:
 hlt_pixel_optimization.py \
 -t hltPhase2PixelTracksSoA \
 -v hltPhase2PixelTracks \
--f file:../29634.402_TTbar_14TeV+Run4D110_Patatrack_PixelOnlyAlpaka/step2.root \
---num_threads 32 \
+-f file:step2.root \
+--num_threads 96 \
 -a 32 \
 -i 10 \
--b examples/config.json \
---num_events -1 -o test
+-b examples/CAExt_config.json \
+--num_events 96 -o test
 ```
 The parameters passed to `optimize_reco.py` are:
 - `-t\--tune`: Name of the module to be tuned
@@ -217,7 +195,7 @@ This branch also includes scripts for plotting the movement of the particles acr
 python3 examples/PlotParticles.py  --dir <folder_name>
 ```
 
-To plot the pareto front (**NEW** version binned in eta and pt):
+To plot the pareto front:
 ```bash
 python3 examples/PlotMetrics.py --dir <folder_name> --best_efficiency --interactive
 ```
