@@ -3,7 +3,7 @@ import optimizer
 from optimizer import MOPSO
 import subprocess
 import itertools
-from utils import get_metrics, get_metrics_names, get_binned_metrics, get_binned_metrics_names, write_csv, parseProcess, spinner, read_csv
+from utils import get_metrics, get_metrics_names, get_binned_metrics, get_binned_metrics_names, write_csv, parseProcess, spinner, read_csv, get_nested_param
 from graphs import convert_to_graph, from_modules_to_module
 import numpy as np
 import uproot
@@ -302,12 +302,12 @@ if __name__ == "__main__":
 
     default_values = {}
     for k in params:
-        if k in params_dict:
-            default_values[k] = params_dict[k].value() # underlying object wrapped in cms type
+        if get_nested_param(params_dict, k) != None:
+            default_values[k] = get_nested_param(params_dict, k).value() # underlying object wrapped in cms type
         else:
             print_warnings("WARNING: Parameter %s does not exist in module %s! The available parameters are:"%(k,modules_to_tune[0]))
             print_warnings(list(params_dict.keys()))
-    print(params_dict)
+
     if(len(default_values) < 1):
         sys.exit("Error: in module %s none of the parameters %s was found! Aborting."%(modules_to_tune[0],params))
     print_subheaders("> > Default values: ")
@@ -315,7 +315,9 @@ if __name__ == "__main__":
     
     ## Defining low bounds and high bounds
     lb, ub = get_bounds("bounds.json")
-    dv = [default_values[key] for key in default_values]
+    dv = np.array(
+        [item for key in default_values for item in (default_values[key] if isinstance(default_values[key], list) else [default_values[key]])],
+    dtype=object)
 
     with open(config_to_run, 'w') as new:
         
@@ -363,7 +365,7 @@ if __name__ == "__main__":
     print(" ### DEBUG: upper_bounds = ", ub)
 
     pso = MOPSO(objective=objective, lower_bounds=lb, upper_bounds=ub, 
-                num_particles=args.num_particles,
+                num_particles=args.num_particles, default_point=dv,
                 param_names=param_names, metric_names=get_general_metrics_names())
     
     pso.optimize(num_iterations=args.num_iterations)
