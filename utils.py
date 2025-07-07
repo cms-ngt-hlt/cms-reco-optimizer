@@ -46,9 +46,9 @@ def get_metrics_names():
 
 # calculate the metrics from validation results in pt and eta bins
 def get_binned_metrics(uproot_file, id):
-    # pdb.set_trace()
-    h_dir_eta = uproot_file['SimpleTrackValidationEtaBins' + str(id)]
-    h_dir_pt = uproot_file['SimpleTrackValidationPtBins' + str(id)]
+
+    h_dir_eta = uproot_file['SimpleTrackValidation' + str(id)]['SimpleTrackValidationEtaBins']
+    h_dir_pt = uproot_file['SimpleTrackValidation' + str(id)]['SimpleTrackValidationPtBins']
     # histograms vs eta
     h_sim_eta = h_dir_eta['h_st_eta'].values()
     h_ass_sim_eta = h_dir_eta['h_ast_eta'].values()
@@ -228,7 +228,9 @@ def add_validation(process,inputs,target):
                 tipTP = cms.double(2),
                 trackLabels = cms.VInputTag(target + str(i)),
                 trackAssociator = cms.InputTag(hitassoc),
-                trackingParticles = cms.InputTag('mix', 'MergedTrackTruth')               
+                trackingParticles = cms.InputTag('mix', 'MergedTrackTruth'),
+                etaBins = cms.vdouble(-4.0, -1.5, 1.5, 4.0),  # Default bins in eta for negative endcap, barrel, and positive endcap
+                ptBins = cms.vdouble(0.0, 3.0, 10.0, 1000.0)  # Default bins in pt 0-3 GeV, 3-10 GeV, 10-1000 GeV
             )
         )
 
@@ -237,82 +239,6 @@ def add_validation(process,inputs,target):
     process.simpleValidationSeq = cms.Sequence(sum(taskList[1:],taskList[0]))
     process.simpleValidationPath = cms.EndPath(process.simpleValidationSeq)
     process.schedule.extend([process.simpleValidationPath])
-
-    return process
-
-
-def add_validation_binned(process,inputs,target):
-
-    # Here we assume that the process we have given in input has already the 
-    # validation and the prevalidation well defined and so we just track
-    # back wich hit associator we need to use
-    hitassoc = ""
-    for f in modules_by_type(process,"TrackAssociatorEDProducer"):
-        #print(getattr(f,"label_tr"))
-        if getattr(f,"label_tr").value() == target:
-            hitassoc = getattr(f,"associator").value()
-            break
-    
-    taskList_eta = []
-    taskList_pt = []
-    for i,_ in enumerate(inputs):
-        
-        # All these params may be copied from the MTV defined in the process
-        name = 'SimpleTrackValidationEtaBins' + str(i)
-        setattr(process, name, cms.EDAnalyzer('SimpleTrackValidationEtaBins',
-                chargedOnlyTP = cms.bool(True),
-                intimeOnlyTP = cms.bool(False),
-                invertRapidityCutTP = cms.bool(False),
-                lipTP = cms.double(30.0),
-                maxPhiTP = cms.double(3.2),
-                maxRapidityTP = cms.double(4.5),
-                minHitTP = cms.int32(0),
-                minPhiTP = cms.double(-3.2),
-                minRapidityTP = cms.double(-4.5),
-                pdgIdTP = cms.vint32(),
-                ptMaxTP = cms.double(1e+100),
-                ptMinTP = cms.double(0.9),
-                signalOnlyTP = cms.bool(True),
-                stableOnlyTP = cms.bool(False),
-                tipTP = cms.double(2),
-                trackLabels = cms.VInputTag(target + str(i)),
-                trackAssociator = cms.InputTag(hitassoc),
-                trackingParticles = cms.InputTag('mix', 'MergedTrackTruth')               
-            )
-        )
-
-        taskList_eta.append(getattr(process, name))
-
-        # All these params may be copied from the MTV defined in the process
-        name = 'SimpleTrackValidationPtBins' + str(i)
-        setattr(process, name, cms.EDAnalyzer('SimpleTrackValidationPtBins',
-                chargedOnlyTP = cms.bool(True),
-                intimeOnlyTP = cms.bool(False),
-                invertRapidityCutTP = cms.bool(False),
-                lipTP = cms.double(30.0),
-                maxPhiTP = cms.double(3.2),
-                maxRapidityTP = cms.double(4.5),
-                minHitTP = cms.int32(0),
-                minPhiTP = cms.double(-3.2),
-                minRapidityTP = cms.double(-4.5),
-                pdgIdTP = cms.vint32(),
-                ptMaxTP = cms.double(1e+100),
-                ptMinTP = cms.double(0.4),
-                signalOnlyTP = cms.bool(True),
-                stableOnlyTP = cms.bool(False),
-                tipTP = cms.double(2),
-                trackLabels = cms.VInputTag(target + str(i)),
-                trackAssociator = cms.InputTag(hitassoc),
-                trackingParticles = cms.InputTag('mix', 'MergedTrackTruth')               
-            )
-        )
-
-        taskList_pt.append(getattr(process, name))
-
-    process.SimpleTrackValidationEtaBinsSeq = cms.Sequence(sum(taskList_eta[1:],taskList_eta[0]))
-    process.SimpleTrackValidationPtBinsSeq = cms.Sequence(sum(taskList_pt[1:],taskList_pt[0]))
-    process.simpleBinnedValidationPath = cms.EndPath(process.SimpleTrackValidationEtaBinsSeq + process.SimpleTrackValidationPtBinsSeq)
-    process.schedule.extend([process.simpleBinnedValidationPath])
 
     return process
     
@@ -392,21 +318,6 @@ def expand_process(process,inputs,params,tune,chain,target):
     process = chain_update(process,inputs,tune,chain+[target])
     
     return process
-
-def expand_process_binned(process,inputs,params,tune,chain,target):
-    
-    process = remove_outputs(process) #check for all EndPaths 
-
-    with open("bounds.json") as bounds_file:
-        bounds = json.load(bounds_file)
-    value_types = extract_value_types(bounds)
-        
-    process = modules_tuning(process,inputs,params,tune,value_types)
-    process = add_validation_binned(process,inputs,target)
-    process = chain_update(process,inputs,tune,chain+[target])
-    
-    return process
-
 
 # Recursively extract all parameter paths from a module or PSet
 # Returns a list of dot-separated parameter paths (including nested ones)

@@ -340,12 +340,8 @@ if __name__ == "__main__":
             new.write('chain\t= %s\n'%repr([ f for f in modules_to_modify if "@" not in f]))
             new.write('params\t= %s\n'%repr(params))
             new.write('target\t= %s\n\n'%repr(module_to_valid))
-            if args.binned_metrics:
-                new.write('from utils import expand_process_binned\n')
-                new.write('process = expand_process_binned(process,inputs,params,tune,chain,target)\n')
-            else:
-                new.write('from utils import expand_process\n')
-                new.write('process = expand_process(process,inputs,params,tune,chain,target)\n')                
+            new.write('from utils import expand_process\n')
+            new.write('process = expand_process(process,inputs,params,tune,chain,target)\n')                
             new.write(add.read())
     
     if args.check:

@@ -20,7 +20,7 @@ cd CMSSW_15_1_0_pre3/src
 cmsenv
 git cms-init
 git cms-rebase-topic cms-ngt-hlt:IDRIS-CAEXT-TrackingPOG-25-06-30
-git cms-rebase-topic cms-ngt-hlt:SimpleValidationBinned
+git cms-cherry-pick-pr 48472
 ```
 
 Install the container for The Optimizer:
