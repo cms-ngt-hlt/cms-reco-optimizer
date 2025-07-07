@@ -1,22 +1,108 @@
+# NGT instructions for optimization of Pixel Tracks with CA Extension
+
+This repository: [https://github.com/cms-ngt-hlt/cms-reco-optimizer](https://github.com/cms-ngt-hlt/cms-reco-optimizer)
+
+Optimizer repository: [https://github.com/cms-patatrack/The-Optimizer](https://github.com/cms-patatrack/The-Optimizer)
+Currently using a fork (it contains a transparent but necessary option to include the header in pareto front, used for data visualization and plotting).
+
 <img width="1144" alt="Screenshot 2023-11-24 alle 09 46 27" src="https://github.com/cms-pixel-autotuning/CA-parameter-tuning/assets/16901146/5bee2244-9afc-46a2-99c6-a75705045442">
 
-# Introduction
+## Introduction
 
 This repo has a new `optimize_reco.py` script, modelled on top of `optimize.py` from https://github.com/cms-patatrack/The-Optimizer/tree/main, thought as a wrapper to make the MOPSO work with a generic `cms-sw` reconstruction config in input. 
 
-# First steps
+### Installation
 
-Make sure you have pulled The-Optimizer as a submodule (either using git pull --recursive) or by simply using git pull inside this repository's folder. 
-Then follow the instructions at https://github.com/cms-patatrack/The-Optimizer/tree/main and install it by running 
+We are currently using the `CMSSW_15_1_0_pre3` release:
 ```bash
+cmsrel CMSSW_15_1_0_pre3
+cd CMSSW_15_1_0_pre3/src
+cmsenv
+git cms-init
+git cms-rebase-topic cms-ngt-hlt:IDRIS-CAEXT-TrackingPOG-25-06-30
+git cms-cherry-pick-pr 48472
+```
+
+Install the container for The Optimizer:
+```bash
+git clone git@github.com:cms-ngt-hlt/cms-reco-optimizer.git
+cd cms-reco-optimizer
+git checkout CAExtOptimization
+```
+
+If you are working on the P5 machines, you will need a specific branch of The Optimizer to deactivate Numba, which is in Luca's fork:
+```bash
+git clone git@github.com:Parsifal-2045/The-Optimizer.git
 cd The-Optimizer
+git checkout RemoveNumba
+cd ../..
+```
+
+Finally, compile:
+```bash
+scram b -j 12
+```
+</details>
+
+### [OPTIONAL] Input files
+
+- Single Muon samples
+
+Configuration from the default workflow for "SingleMuPt15Eta0_0p4":
+```bash
+runTheMatrix.py -w upgrade -l 29690.402 -j 0
+```
+
+Configuration from the default workflow for "SingleMuPt15Eta1p7_2p7":
+```bash
+runTheMatrix.py -w upgrade -l 29689.402 -j 0
+```
+
+- TTbar samples
+
+Configuration from the default workflow for "TTbar" without pile-up:
+```bash
+runTheMatrix.py -w upgrade -l 29634.402 -j 0
+```
+
+### [OPTIONAL] Plot of the SimDoublets before optimizing
+
+To plot the doublets before optimizing the cuts, use the SimDoublets analyzer in `src/Validation/TrackingMCTruth/test`".
+Change the input file location and run:
+```bash
+git cms-addpkg Validation/TrackingMCTruth
+cmsRun simDoubletsPhase2_TEST.py
+cmsRun simDoubletsPhase2_HARVESTING.py
+```
+
+In order to remove the pt cut, add this line to `simDoubletsPhase2_TEST.py`
+```python
+process.simDoubletsProducerPhase2.TrackingParticleSelectionConfig.ptMin = cms.double(0.) 
+```
+
+The histograms are stored in the `DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root` file.
+You can download the sakura package to plot the distributions with the current cuts. Instructions are taken from [this repo](https://github.com/JanGerritSchulz/sakura/tree/master).
+
+Install the package:
+```bash
+git clone https://github.com/JanGerritSchulz/sakura.git
+cd sakura
+```
+
+If you are on a machine where pip install works:
+```bash
 pip3 install .
 ```
-Note that you will need to update your `PYTHONPATH` with
+Otherwise:
 ```bash
-export PYTHONPATH="${PYTHONPATH}:PATH_TO_THEOPTIMIZER_REPO"
+export PYTHONPATH=${PYTHONPATH}:$PWD/sakura
 ```
-This can be done automatically by sourcing `extra_setup.sh` once you have created your CMSSW environment.
+
+Produce the plots:
+```bash
+makeCutPlots DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root ../Validation/TrackingMCTruth/test/simDoubletsPhase2_TEST.py -d Sakura -n -1 -a simDoubletsAnalyzerPhase2
+makeGeneralPlots DQM_V0001_R000000001__Global__CMSSW_X_Y_Z__RECO.root -d Sakura -n -1
+```
 
 # Run The-Optimizer
 
@@ -27,11 +113,11 @@ Let's use as an example the files found in the [examples](./examples) folder whi
 [`hlt_pixel_optimization.py`](./examples/hlt_pixel_optimization.py), generated with:
 ```bash
 cmsDriver.py step2 \
--s L1P2GT,HLT:@relvalRun4,VALIDATION \
+-s L1P2GT,HLT:@relvalRun4,VALIDATION:@hltValidation \
 --processName HLTX \
 --conditions auto:phase2_realistic_T33 \
---datatier GEN-SIM-RECO,MINIAODSIM,NANOAODSIM,DQMIO \
---eventcontent RECOSIM,MINIAODSIM,NANOEDMAODSIM,DQM \
+--datatier GEN-SIM-RECO,DQMIO \
+--eventcontent RECOSIM,DQM \
 --geometry ExtendedRun4D110 \
 --era Phase2C17I13M9 \
 --procModifiers alpaka \
@@ -43,34 +129,44 @@ cmsDriver.py step2 \
 ```
 is a regular CMSSW configuration that runs the HLT reconstruction and validation.
 
-[`params.csv`](./examples/params.csv) contains the list of parameters to be tuned (comma separated)
+[`CAExt_config.json`](./examples/CAExt_config.json) contains the dictionary of all parameters to be tuned including their lower and upper bounds, as well as their type (in case of vectors, the type of their elements) 
 
-[`config.json`](./examples/config.json) contains the dictionary of all parameters to be tuned including their lower and upper bounds, as well as their type (in case of vectors, the type of their elements) 
+Having these 2 files, The Optimizer can be run. First, source The Optimizer path from within the `cms-reco-optimizer` folder:
 
-Having these 3 files, The Optimizer is run with the command:
+```bash
+cd cms-reco-optimizer
+export PYTHONPATH=${PYTHONPATH}:$PWD/The-Optimizer
+```
+
+Then, start the optimization:
 ```bash
 ./optimize_reco.py \
 hlt_pixel_optimization.py \
 -t hltPhase2PixelTracksSoA \
 -v hltPhase2PixelTracks \
---pars examples/params.csv \
 -f file:step2.root \
---num_threads 10 \
--p 100 \
+--num_threads 96 \
+-a 32 \
 -i 10 \
---typedBounds examples/config.json
+-b examples/CAExt_config.json \
+--num_events 96 -o test
 ```
 The parameters passed to `optimize_reco.py` are:
-- `-t\--tune` gets the name of the module we want to tune (this could be a list but for the moment implemented only for a single module)
-- `-v\--validate` is the modules that produces the object on which we want to validate, given in input to the validation
-- `--pars` gets the list of parameters that we want to tune with the MOPSO. It can be either a space-separated list passed directy from the command line or a comma-separated list in a `.csv` file
-- `-f` to specify the file(s) to be used as input for CMSSW.
-- `--numThreads` specifies the number of threads to use in each cmsRun instance
-- `-p\--num_particles` the number of agents.
-- `-i\--num_iterations` the number of iterations.
-- `--typedBounds` takes care of the definition of the upper and lower bounds for the parameters and their types. It expects a `.json` dictionary in the same format as the one shown in the example
-    
-Executing the command, `optimize_reco.py` will run the following steps:
+- `-t\--tune`: Name of the module to be tuned
+- `-v\--validate`: Name of the modules that produces the object on which we want to validate, given in input to the validation
+- `-b\--bounds` json file for the definition of the upper and lower bounds for the parameters and their types. It expects a `.json` dictionary in the same format as the one shown in the example
+- `-p` gets the list of parameters that we want to tune with the MOPSO. It can be either a space-separated list passed directy from the command line or a comma-separated list in a `.csv` file
+- `-f` to specify the file(s) to be used as input for CMSSW
+- `-j\--numThreads` specifies the number of threads to use in each cmsRun instance
+- `-a\--num_particles` the number of agents
+- `-i\--num_iterations` the number of iterations
+- `-o` optional output tag for the foder name
+- `-i\--num_iterations` the number of iterations
+- `--debug` to run in debug mode (helpful when the error in the subprocess running `cmsRun`)
+- `--binned_metrics` activate the binned metrics in eta and pt
+
+<details>
+<summary>Executing the command, `optimize_reco.py` will run the following steps:</summary>
 
 1. loads the `process` defined in the input config adding to it the `DependencyGraph` `Service` and setting it to run with no source (`EmptySource`) and zero events. The new `process_zero` is then run just to get the graph of the modules used in the config.
 
@@ -87,5 +183,54 @@ Then, the `process_to_run.py` is the config actually run by the MOPSO and it use
 All of this happens in an ad-hoc folder and one may continue the previous run by specifing in which folder (`--dir`) the script should look for the previous end state and for how many extra iterations `--continuing`. E.g.
 
 ```bash
-./optimize_reco.py --continuing 10 --dir optimize.step3_pixel_20231123.010104
+./optimize_reco.py --continuing 10 --dir optimize.hlt_pixel_optimization_20250228.141239_test
 ```
+
+</details>
+
+## Plotting the results and validate
+
+This branch also includes scripts for plotting the movement of the particles across different iterations (**NEW** version binned in eta and pt):
+```bash
+python3 examples/PlotParticles.py  --dir <folder_name>
+```
+
+To plot the pareto front:
+```bash
+python3 examples/PlotMetrics.py --dir <folder_name> --best_efficiency --interactive
+```
+
+To validate the new configuration:
+```bash
+python3 examples/GetConfigAndValidate.py --dir <folder_name> --validate --simdoublets
+```
+Insert the point number you selected, and run the commands for the validation.
+
+The plot the new configuration install the utils package:
+```bash
+git clone git@github.com:cms-ngt-hlt/utils.git
+```
+
+Create your configuration in `Utils/json/myconfig.json` and run
+```bash
+python3 plotter.py json/myconfig.json
+```
+
+<!-- Or:
+```bash
+python3 examples/ValidationPlots.py --dir optimize.hlt_pixel_optimization_20250127.165402
+``` -->
+
+<!-- [Optional] Compare the metrics obtained fro your point and the default configuration:
+```bash
+cd optimize.hlt_pixel_optimization_20250306.175419_TTBar_SplitBinnedMetricsNoTPselector_AllScalarCuts
+cmsRun -n 0 process_to_run.py parametersFile=checkpoint/checkpoint/Configuration/old_point.csv outputFile=checkpoint/checkpoint/Configuration/old_point.root
+cmsRun -n 0 process_to_run.py parametersFile=checkpoint/checkpoint/Configuration/new_point43.csv outputFile=checkpoint/checkpoint/Configuration/new_point43.root
+python3 example/PlotPoint.py 
+``` -->
+
+<!-- 
+cmsDriver.py step2 -s DIGI:pdigi_valid,L1TrackTrigger,L1,L1P2GT,DIGI2RAW,HLT:75e33,VALIDATION --conditions auto:phase2_realistic_T33 --datatier GEN-SIM-DIGI-RAW,DQMIO -n -1 --eventcontent FEVTDEBUGHLT,DQMIO --geometry ExtendedRun4D110 --era Phase2C17I13M9 --procModifiers alpaka --nThreads 1 --filein file:step1.root
+
+cmsDriver.py step5 -s HARVESTING:@trackingOnlyValidation+@HLTMon+postProcessorHLTtrackingSequence --conditions auto:phase2_realistic_T33 --mc --geometry ExtendedRun4D110 --scenario pp --filetype DQM --era Phase2C17I13M9 -n 10 --filein file:step2_DIGI_L1TrackTrigger_L1_L1P2GT_DIGI2RAW_HLT_VALIDATION_inDQM.root 
+-->

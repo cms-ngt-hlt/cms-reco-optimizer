@@ -3,7 +3,7 @@ import optimizer
 from optimizer import MOPSO
 import subprocess
 import itertools
-from utils import get_metrics, write_csv, parseProcess, spinner, read_csv
+from utils import get_metrics, get_metrics_names, get_binned_metrics, get_binned_metrics_names, write_csv, parseProcess, spinner, read_csv, get_nested_param
 from graphs import convert_to_graph, from_modules_to_module
 import numpy as np
 import uproot
@@ -33,18 +33,20 @@ is_continuing = '--continuing' in sys.argv
 if not is_continuing:
     parser.add_argument('config', help = "Config to tune.")
 ## Optimizer parameters
-parser.add_argument('-p', '--num_particles', default=100, type=int, action='store',help = "Number of agents to spawn by the MOPSO optimizer.")
+parser.add_argument('-o', '--out_name', default=None, type=str,help = "Name for the output folder, if not specified use only timestamp")
+parser.add_argument('-a', '--num_particles', default=100, type=int, action='store',help = "Number of agents to spawn by the MOPSO optimizer.")
 parser.add_argument('-i', '--num_iterations', default=100, type=int, action='store',help = "Number of iterations to be run by MOPSO optimizer.")
-parser.add_argument('-c', '--continuing', type=str, default=None)
 parser.add_argument('-d', '--dir', type=str, action='store', help = "Directory where to continue.", required = is_continuing)  
-parser.add_argument('-b', '--bounds', nargs=2,help='Mins',default=(5,5))
-parser.add_argument('--typedBounds', nargs=1,help='json file with dictionary for upper,lower and type of params', default=None)
-parser.add_argument('--check', action='store_true', help = "Run the config once before the optimizer.")
-parser.add_argument('--debug', action='store_true', help = "Debug printouts.")
+parser.add_argument('-b', '--bounds', help='Bounds json file with dictionary for upper, lower bound and type of params', required = not is_continuing)
+parser.add_argument('-p', '--pars', help='Parameters to tune. \n These may be given as a comma-separated list of parameters names. When not specified, all parameters in the config json will be optimized.')
+parser.add_argument('--binned_metrics', action='store_true', help = "Run the config once before the optimizer.")
+parser.add_argument('--check',          action='store_true', help = "Run the config once before the optimizer.")
+parser.add_argument('--debug',          action='store_true', help = "Debug printouts.")
+parser.add_argument('--continuing',     type=str, default=None)
+
 ## cmsRun parameters
-parser.add_argument('-t','--tune', nargs='+', help='List of modules to tune.', required = not is_continuing)
-parser.add_argument('-v','--validate', type=str, help='Target module to validate.', required = not is_continuing)
-parser.add_argument('--pars', nargs='+', help='Parameters to tune. \n These may be given as a list of parameters names or a file with the names separated by a ",".', required = not is_continuing)
+parser.add_argument('-t', '--tune', nargs='+', help='List of modules to tune.', required = not is_continuing)
+parser.add_argument('-v', '--validate', type=str, help='Target module to validate.', required = not is_continuing)
 parser.add_argument('-j', '--num_threads', default=8, type=int, action='store')
 parser.add_argument('-e', '--num_events', default=100, type=int, action='store')
 parser.add_argument('-f', '--input_file', nargs='+', default=["file:step2.root"])
@@ -52,6 +54,18 @@ parser.add_argument('--reco', nargs='?', choices=allowed_recos,help='Type of rec
 parser.add_argument('-T', '--timing', action='store_true', help = "Add timing/throughput for the pareto front.")
 
 args = parser.parse_args()
+
+def get_general_metrics (uproot_file, id):
+    if args.binned_metrics:
+        return get_binned_metrics(uproot_file, id)
+    else:
+        return get_metrics(uproot_file, id)
+
+def get_general_metrics_names ():
+    if args.binned_metrics:
+        return get_binned_metrics_names()
+    else:
+        return get_metrics_names()
 
 # run pixel reconstruction and simple validation
 def reco_and_validate(params,config,**kwargs):#,timing=False):
@@ -65,19 +79,25 @@ def reco_and_validate(params,config,**kwargs):#,timing=False):
     
     # writing current input parameters from mopso
     write_csv('temp/parameters.csv', params)
-    validation_result = 'temp/simple_validation.root'
-    
+    for i in range(0, args.num_iterations + 1):
+        validation_result = f'temp/simple_validation{i}.root'
+        if not os.path.exists(os.path.join(os.getcwd(), validation_result)):
+            break
 
     # redirecting outputs to logs
     logfiles = tuple('%s/logs/%s' % (workdir, name) for name in ['process_last_out', 'process_last_err'])
     stdout = open(logfiles[0], 'w')
     stderr = open(logfiles[1], 'w')
 
-    command = ['cmsRun',config,'parametersFile=temp/parameters.csv', 'outputFile=' + validation_result]    
-    subprocess.run(command,stdout = stdout, stderr = stderr)
+    command = ['cmsRun', config, 'parametersFile=temp/parameters.csv', 'outputFile=' + validation_result]    
+    print(f" ### INFO: Running subprocess \n{command}")
+    if args.debug:
+        subprocess.run(command)
+    else:
+        subprocess.run(command,stdout = stdout, stderr = stderr)
     
     with uproot.open(validation_result) as uproot_file:
-        population_fitness = [get_metrics(uproot_file, i) for i in range(num_particles)]
+        population_fitness = [get_general_metrics(uproot_file, i) for i in range(num_particles)]
 
     return population_fitness
   
@@ -98,25 +118,83 @@ def print_logo():
 def copy_to_unique(c):
 
     formatted_date = datetime.now().strftime("%Y%m%d.%H%M%S")
-    b = "./optimize."+c.replace(".py","")+"_"+formatted_date #str(random.getrandbits(64))
+    b = "./optimize."+formatted_date #str(random.getrandbits(64))
+    if args.out_name:
+        b = b+"_"+args.out_name
     os.mkdir(b)
     shutil.copy(c,b+"/"+c)
     shutil.copy("utils.py",b)
     shutil.copy(os.path.basename(__file__),b)
     os.chdir(b)
-    
+    return b
+
+def get_bounds(par_file):
+    lb = []
+    ub = []
+    with open(par_file, 'r') as file:
+        params_bounds = json.loads(file.read())
+    print("> > Read from",repr(par_file),":")
+    print_bounds(params_bounds)
+    for k in params_bounds.keys():
+        value_type = params_bounds[k]["value_type"]
+        if value_type == "int":
+            lb_ = params_bounds[k]["down"]
+            lb = lb + [int(lb_)] if not hasattr(lb_, "__len__") else lb + [int(j) for j in lb_]
+            ub_ = params_bounds[k]["up"]
+            ub = ub + [int(ub_)] if not hasattr(ub_, "__len__") else ub + [int(j) for j in ub_]
+        elif value_type == "double": 
+            lb_ = params_bounds[k]["down"]
+            lb = lb + [float(lb_)] if not hasattr(lb_, "__len__") else lb + [float(j) for j in lb_]
+            ub_ = params_bounds[k]["up"]
+            ub = ub + [float(ub_)] if not hasattr(ub_, "__len__") else ub + [float(j) for j in ub_]
+    return lb, ub
+
+def get_input_files(input_arg):
+    # Accepts a list or a string
+    # If input_arg is a list of length 1, treat as a single input
+    if isinstance(input_arg, list):
+        if len(input_arg) == 1:
+            input_arg = input_arg[0]
+        elif len(input_arg) > 1:
+            # List of files
+            result = []
+            for f in input_arg:
+                if f.startswith("file:"):
+                    fpath = f[5:]
+                    result.append("file:" + os.path.abspath(fpath))
+                else:
+                    result.append("file:" + os.path.abspath(f))
+            return result
+        else:
+            return []
+    # Now input_arg is a string
+    # Remove file: prefix if present
+    if input_arg.startswith("file:"):
+        path = input_arg[5:]
+    else:
+        path = input_arg
+    if os.path.isdir(path):
+        # Directory: collect all files in directory, sorted
+        files = sorted([
+            os.path.join(path, fname)
+            for fname in os.listdir(path)
+            if os.path.isfile(os.path.join(path, fname))
+        ])
+        return ["file:" + os.path.abspath(f) for f in files]
+    else:
+        # Single file
+        return ["file:" + os.path.abspath(path)]
 
 if __name__ == "__main__":
     
     print_logo()
-    input_files = [ "file:" + os.path.abspath(f[5:]) if f.startswith("file:") else f for f in args.input_file ]
+    input_files = get_input_files(args.input_file)
     start_dir = os.getcwd()
     config_to_run = 'process_to_run.py'
     config_to_graph = 'process_zero.py'
 
-    
     optimizer.FileManager.saving_enabled = True
-    objective = optimizer.Objective(objective_functions=partial(reco_and_validate, config = config_to_run),num_objectives=2)
+    objective = optimizer.Objective(objective_functions=partial(reco_and_validate, config = config_to_run), num_objectives=2)
     loglevel = 'DEBUG' if args.debug else 'INFO'
     optimizer.Logger.setLevel(loglevel)
 
@@ -128,16 +206,18 @@ if __name__ == "__main__":
         os.chdir(args.dir)
         print_headers("> Continuing the optimization in folder: %s"%args.dir)
 
+        lb, ub = get_bounds("bounds.json")
+
         n_particles = len(read_csv("temp/parameters.csv"))
         pso = MOPSO(objective=objective,
-                    lower_bounds=read_csv("lb.csv")[0], upper_bounds=read_csv("ub.csv"))
+                    lower_bounds=lb, upper_bounds=ub,
+                    social_coefficient=1)
         pso.optimize(num_iterations=args.num_iterations)
         sys.exit(0)
     
     config_input = args.config
-    ## Move to the new hashed folder
 
-    copy_to_unique(config_input)
+    out_folder = copy_to_unique(config_input)
     workdir = os.getcwd()
     checkdir = workdir + '/checkpoint/'
     if not os.path.exists(checkdir):
@@ -154,11 +234,10 @@ if __name__ == "__main__":
     print("> > Module to validate\t:",module_to_valid)
     print("> > Input file(s)\t:",input_files)
 
-    # recotuner = RecoTuner(files = input_files, args)
-
     print_headers("> Running with 0 events to build the graph")
     dot_to_run = config_input.replace("py","dot")
     process_zero = parseProcess(config_input)
+
     ## This is just to get the dependecy graph
     process_zero.source = cms.Source("EmptySource",
         numberEventsInRun = cms.untracked.uint32(0),
@@ -172,7 +251,7 @@ if __name__ == "__main__":
         f.write(process_zero.dumpPython() )
         f.write('\n' )
 
-    # redirecting outputs to logs
+    ## Redirecting outputs to logs
     os.mkdir("logs")
     logfiles = tuple('%s/logs/%s' % (workdir, name) for name in ['process_zero_out', 'process_zero_err'])
     with open(logfiles[0], 'w') as stdout, open(logfiles[1], 'w') as stderr:
@@ -184,93 +263,61 @@ if __name__ == "__main__":
     
     print("> > Modules to replicate   :",repr(modules_to_modify))
     
-
     ## Getting parameter names that could be either
     #  - a list
-    #  - an input csv file with a list
-    print_headers("> Parameters to tune:")
-    if len(args.pars) == 1 and Path(start_dir+"/"+args.pars[0]).is_file():
-        par_file = start_dir+"/"+args.pars[0]
-        with open(par_file, 'r') as file:
-            params = file.read().replace("\n","").split(",")
-        print("> > Read from",repr(par_file),": ",params)
-    else:
-        params = args.pars
-        with open('params_to_run.csv',"w") as file:
-            file.write("%s"%",".join(args.pars))
-        print("> > Read in input:",params,"(saved in params_to_run.csv)")
+    #  - none (all parameters in the bounds json file will be optimized)
+    par_file = start_dir+"/"+args.bounds
+    with open(par_file, 'r') as file:
+        all_params = list(json.loads(file.read()).keys())
+    print_headers("> Parameters defined:")
+    print(all_params)
 
-    # Handling parameter values in input
-    ##TODO add a check on bounds being well ordered (min < max)
+    print_headers("> Parameters to tune:")
+    if args.pars != None: 
+        selected_params = args.pars.split(',')
+        params = list(set(selected_params) & set(all_params))
+        print("> > Read in input:",params,"(saved in params_to_run.csv)")
+    else:
+        params = all_params
+        print("> > Read all parameters in ",repr(par_file),": ",params)
+
+    ## Save parameters to json file, keeping only the ones used in the optimization
+    with open(par_file, 'r') as file:
+        original_dict = json.loads(file.read())
+    filtered_dict = {key: original_dict[key] for key in params if key in original_dict}
+    with open("bounds.json", "w") as json_file:
+        json.dump(filtered_dict, json_file, indent=4)
+
+    ## Get parameter names for header (repeat multiple times in case of a vector)
+    param_names = []
+    for key in params:
+        if not hasattr(filtered_dict[key]["down"], "__len__"): 
+            param_names += [key]
+        else: 
+            param_names += [f'{key}{i}' for i in range(len(filtered_dict[key]["down"]))]
+
+    ## Handling parameter values in input
     print_headers("> Parameter values:")
     params_dict = getattr(process_zero,modules_to_tune[0]).parameters_()
 
     default_values = {}
     for k in params:
-        if k in params_dict:
-            default_values[k] = params_dict[k].value() # underlying object wrapped in cms type
+        if get_nested_param(params_dict, k) != None:
+            default_values[k] = get_nested_param(params_dict, k).value() # underlying object wrapped in cms type
         else:
             print_warnings("WARNING: Parameter %s does not exist in module %s! The available parameters are:"%(k,modules_to_tune[0]))
             print_warnings(list(params_dict.keys()))
-    print(params_dict)
+
     if(len(default_values) < 1):
         sys.exit("Error: in module %s none of the parameters %s was found! Aborting."%(modules_to_tune[0],params))
     print_subheaders("> > Default values: ")
+    print_bounds(default_values)    
     
-    #Defining low bounds and high bounds
-    lb = []
-    ub = []
-    dv = []
-    print_bounds(default_values)
-    if (args.typedBounds is not None):
-        with open(start_dir+"/"+args.typedBounds[0], 'r') as file:
-            params_bounds = json.loads(file.read())
-        print("> > Read from",repr(args.typedBounds[0]),":")
-        print_bounds(params_bounds)
-        for k in params_bounds.keys():
-            dv.append(default_values[k])
-            value_type = params_bounds[k]["value_type"]
-            if value_type == "int":
-                lb_ = params_bounds[k]["down"]
-                lb = lb + [int(lb_)] if not hasattr(lb_, "__len__") else lb + [int(j) for j in lb_]
-                ub_ = params_bounds[k]["up"]
-                ub = ub + [int(ub_)] if not hasattr(ub_, "__len__") else ub + [int(j) for j in ub_]
-            elif value_type == "double": 
-                lb_ = params_bounds[k]["down"]
-                lb = lb + [float(lb_)] if not hasattr(lb_, "__len__") else lb + [float(j) for j in lb_]
-                ub_ = params_bounds[k]["up"]
-                ub = ub + [float(ub_)] if not hasattr(ub_, "__len__") else ub + [float(j) for j in ub_]
-    else:
-        params_bounds = dict(zip(["Low","High"],args.bounds))
-        for b,w in params_bounds.items():
-            print_subheaders("> > %s bounds: "%b)
-            if Path(start_dir+"/"+str(w)).is_file():
-                with open(start_dir+"/"+w, 'r') as file:
-                     params_bounds[b] = json.loads(file.read())
-                print("> > Read from",repr(w),":")
-                print_bounds(params_bounds[b])
-            else:
-                w = float(w)
-                m = w if b=="High" else 1./w
-                params_bounds[b] = {k: np.multiply(v,m).astype(type(v[0])).tolist() if hasattr(v, "__len__") else type(v)(float(v)*m) for k,v in default_values.items()  }
-                print("> > From input (factor=%.3f):"%m)
-                print_bounds(params_bounds[b])
-            sys.stdout.write("\r")
-        for f in list(params_bounds["High"].values()):
-            ub = ub + f if hasattr(f, "__len__") else ub + [f]
-        for f in list(params_bounds["Low"].values()):
-            lb = lb + f if hasattr(f, "__len__") else lb + [f]
-        for f in list(default_values.values()):
-            dv = dv + f if hasattr(f, "__len__") else dv + [f]
-
-
-    # Dumping value dictionaries for the records
-    #pd.DataFrame(default_values).to_json("default_values.json")
-    #pd.DataFrame(params_bounds["High"]).to_json("high_values.json")
-    #pd.DataFrame(params_bounds["Low"]).to_json("low_values.json")
-    # Dumping lower bounds and upper bounds for "continuing option"
-    write_csv("lb.csv",lb)
-    write_csv("ub.csv",ub)
+    ## Defining low bounds and high bounds
+    lb, ub = get_bounds("bounds.json")
+    dv = np.array(
+        [item for key in default_values for item in (default_values[key] if isinstance(default_values[key], list) else [default_values[key]])],
+    dtype=object)
 
     with open(config_to_run, 'w') as new:
         
@@ -293,15 +340,15 @@ if __name__ == "__main__":
             new.write('chain\t= %s\n'%repr([ f for f in modules_to_modify if "@" not in f]))
             new.write('params\t= %s\n'%repr(params))
             new.write('target\t= %s\n\n'%repr(module_to_valid))
-
+            new.write('from utils import expand_process\n')
+            new.write('process = expand_process(process,inputs,params,tune,chain,target)\n')                
             new.write(add.read())
-
     
     if args.check:
         print_headers("> Running once with %d events to test"%args.num_events)
         logfiles = tuple('%s/logs/%s' % (workdir, name) for name in ['process_check_out', 'process_check_err'])
         with open(logfiles[0], 'w') as stdout, open(logfiles[1], 'w') as stderr:
-            write_csv("default_values.csv",dv)
+            write_csv("default_values.csv", dv)
             job = subprocess.Popen(['cmsRun', config_to_run, "parametersFile=default_values.csv"], cwd=workdir, stderr=stderr, stdout=stdout)
             job.communicate()
     
@@ -309,12 +356,14 @@ if __name__ == "__main__":
     print("> > Number of agents    :",args.num_particles)
     print("> > Number of iterations:",args.num_iterations)
 
-    pso = MOPSO(objective=objective,lower_bounds=lb, upper_bounds=ub, 
-                num_particles=args.num_particles)
+    print(" ### DEBUG: param_names = ", param_names)
+    print(" ### DEBUG: lower_bounds = ", lb)
+    print(" ### DEBUG: upper_bounds = ", ub)
+
+    pso = MOPSO(objective=objective, lower_bounds=lb, upper_bounds=ub, 
+                num_particles=args.num_particles, default_point=dv,
+                param_names=param_names, metric_names=get_general_metrics_names())
     
     pso.optimize(num_iterations=args.num_iterations)
     
-    
-# run the optimization algorithm
-#pso.optimize(history_dir='history', checkpoint_dir='checkpoint')
 
