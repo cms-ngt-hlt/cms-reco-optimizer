@@ -27,7 +27,6 @@ Install the container for The Optimizer:
 ```bash
 git clone git@github.com:cms-ngt-hlt/cms-reco-optimizer.git
 cd cms-reco-optimizer
-git checkout CAExtOptimization
 ```
 
 If you are working on the P5 machines, you will need a specific branch of The Optimizer to deactivate Numba, which is in Luca's fork:
