@@ -29,12 +29,10 @@ git clone git@github.com:cms-ngt-hlt/cms-reco-optimizer.git
 cd cms-reco-optimizer
 ```
 
-If you are working on the P5 machines, you will need a specific branch of The Optimizer to deactivate Numba, which is in Luca's fork:
+Install The Optimizer:
 ```bash
-git clone git@github.com:Parsifal-2045/The-Optimizer.git
-cd The-Optimizer
-git checkout RemoveNumba
-cd ../..
+git clone git@github.com:cms-patatrack/The-Optimizer.git
+cd ..
 ```
 
 Finally, compile:
@@ -134,7 +132,7 @@ Having these 2 files, The Optimizer can be run. First, source The Optimizer path
 
 ```bash
 cd cms-reco-optimizer
-export PYTHONPATH=${PYTHONPATH}:$PWD/The-Optimizer
+export PYTHONPATH=${PYTHONPATH}:$PWD/The-Optimizer/src
 ```
 
 Then, start the optimization:

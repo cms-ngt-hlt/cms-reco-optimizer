@@ -194,7 +194,8 @@ if __name__ == "__main__":
     config_to_graph = 'process_zero.py'
 
     optimizer.FileManager.saving_enabled = True
-    objective = optimizer.Objective(objective_functions=partial(reco_and_validate, config = config_to_run), num_objectives=2)
+    optimizer.FileManager.headers_enabled = True
+    objective = optimizer.Objective(objective_functions=partial(reco_and_validate, config = config_to_run), objective_names=get_general_metrics_names(), num_objectives=len(get_general_metrics_names()))
     loglevel = 'DEBUG' if args.debug else 'INFO'
     optimizer.Logger.setLevel(loglevel)
 
@@ -362,7 +363,7 @@ if __name__ == "__main__":
 
     pso = MOPSO(objective=objective, lower_bounds=lb, upper_bounds=ub, 
                 num_particles=args.num_particles, default_point=dv,
-                param_names=param_names, metric_names=get_general_metrics_names())
+                param_names=param_names)
     
     pso.optimize(num_iterations=args.num_iterations)
     
